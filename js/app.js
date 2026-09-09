@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const NT2 = window.NT2 = window.NT2 || {};
 
   /* ─────────────────────────────────────────
@@ -10,6 +10,7 @@
     teachers:      'ຄູອາຈານ',
     students:      'ນັກຮຽນ',
     scores:        'ຄະແນນ',
+    attendance:    'ຕິດຕາມການມາຮຽນ',
     schedule:      'ຕາຕະລາງ',
     classes:       'ຊັ້ນຮຽນ'
   };
@@ -263,6 +264,54 @@
       }
     },
 
+    /* ── IMAGE ZOOM / LIGHTBOX ───────────── */
+    zoomImage(photoUrl, title, subtitle) {
+      if (!photoUrl || !photoUrl.trim() || !photoUrl.trim().startsWith('http')) {
+        showToast('ບໍ່ມີຮູບພາບທີ່ຈະຂະຫຍາຍ', 'info');
+        return;
+      }
+      const existing = document.querySelector('.image-zoom-overlay');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.className = 'image-zoom-overlay active';
+      overlay.innerHTML = `
+        <div class="zoom-image-container">
+          <button class="zoom-close-btn" title="ປິດ (ESC)"><span class="material-symbols-rounded">close</span></button>
+          <div class="zoom-image-wrapper">
+            <img src="${photoUrl.trim()}" alt="${title || 'ຮູບ'}" onerror="this.onerror=null;showToast('ບໍ່ສາມາດໂຫລດຮູບໄດ້','error');this.closest('.image-zoom-overlay').remove()">
+          </div>
+          ${(title || subtitle) ? `
+          <div class="zoom-info">
+            ${title ? `<div class="zoom-title">${title}</div>` : ''}
+            ${subtitle ? `<div class="zoom-subtitle">${subtitle}</div>` : ''}
+            <div class="zoom-tip">ກົດບ່ອນຫວ່າງ ຫຼື ປຸ່ມປິດ ເພື່ອອອກ</div>
+          </div>` : ''}
+        </div>
+      `;
+
+      const closeZoom = () => {
+        document.removeEventListener('keydown', onEsc);
+        overlay.classList.remove('active');
+        setTimeout(() => overlay.remove(), 250);
+      };
+
+      const onEsc = e => { if (e.key === 'Escape') closeZoom(); };
+      document.addEventListener('keydown', onEsc);
+
+      overlay.querySelector('.zoom-close-btn')?.addEventListener('click', e => {
+        e.stopPropagation();
+        closeZoom();
+      });
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay || e.target.classList.contains('zoom-image-container')) {
+          closeZoom();
+        }
+      });
+
+      document.body.appendChild(overlay);
+    },
+
     /* ── ROUTER ──────────────────────────── */
     loadPage(pageId) {
       if (!PAGE_TITLES[pageId]) pageId = 'dashboard';
@@ -288,6 +337,7 @@
         teachers:      () => this.renderTeachers(content),
         students:      () => this.renderStudents(content),
         scores:        () => this.renderScores(content),
+        attendance:    () => this.renderAttendance(content),
         schedule:      () => this.renderSchedule(content),
         classes:       () => this.renderClasses(content)
       };
@@ -329,6 +379,10 @@
           content: a.detail
         }));
       }
+      pastActivities = pastActivities
+        .filter(a => a && a.date && a.title)
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      pastActivities.forEach((a, i) => { a._num = i + 1; });
 
       container.innerHTML = `
         <div class="page-container fade-in">
@@ -377,14 +431,20 @@
             <div class="card">
               <div class="card-header">
                 <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px;color:#E53935">priority_high</span>ແຈ້ງການດ່ວນ</span>
-                <button class="btn btn-sm btn-danger admin-only" onclick="NT2.App._addAnnouncement('urgent')">
+                <button class="btn btn-sm btn-danger admin-only" onclick="NT2.App._addAnnouncementModal('urgent')">
                   <span class="material-symbols-rounded" style="font-size:15px">add</span>ເພີ່ມ
                 </button>
               </div>
               <div class="card-body announcement-list">
                 ${urgent.length ? urgent.map(a => `
                   <div class="announcement-item urgent">
-                    <span class="announcement-badge">ດ່ວນ</span>
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                      <span class="announcement-badge">ດ່ວນ</span>
+                      <div class="admin-only" style="display:flex;gap:4px">
+                        <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ດ່ວນ','${(a.title||'').replace(/'/g,"\\'")}','${(a.content||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
+                        <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
+                      </div>
+                    </div>
                     <h4 class="announcement-title">${a.title}</h4>
                     <div class="announcement-date"><span class="material-symbols-rounded" style="font-size:13px;vertical-align:middle">calendar_today</span> ${fmtDate(a.date)}</div>
                     <div class="announcement-content">${a.content}</div>
@@ -395,14 +455,20 @@
             <div class="card">
               <div class="card-header">
                 <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px;color:var(--accent-primary)">campaign</span>ແຈ້ງການທົ່ວໄປ</span>
-                <button class="btn btn-sm btn-primary admin-only" onclick="NT2.App._addAnnouncement('normal')">
+                <button class="btn btn-sm btn-primary admin-only" onclick="NT2.App._addAnnouncementModal('normal')">
                   <span class="material-symbols-rounded" style="font-size:15px">add</span>ເພີ່ມ
                 </button>
               </div>
               <div class="card-body announcement-list">
                 ${normal.length ? normal.map(a => `
                   <div class="announcement-item normal">
-                    <span class="announcement-badge">ທົ່ວໄປ</span>
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                      <span class="announcement-badge">ທົ່ວໄປ</span>
+                      <div class="admin-only" style="display:flex;gap:4px">
+                        <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ທົ່ວໄປ','${(a.title||'').replace(/'/g,"\\'")}','${(a.content||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
+                        <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
+                      </div>
+                    </div>
                     <h4 class="announcement-title">${a.title}</h4>
                     <div class="announcement-date"><span class="material-symbols-rounded" style="font-size:13px;vertical-align:middle">calendar_today</span> ${fmtDate(a.date)}</div>
                     <div class="announcement-content">${a.content}</div>
@@ -413,8 +479,8 @@
 
           <div class="card mt-3">
             <div class="card-header">
-              <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px">timeline</span>ການເຄື່ອນໄຫວຜ່ານມາ</span>
-              <button class="btn btn-sm btn-primary admin-only" onclick="NT2.App._addActivity()">
+              <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px">timeline</span>ການເຄື່ອນໄຫວຜ່ານມາທີ່ລ່າສຸດ</span>
+              <button class="btn btn-sm btn-primary admin-only" onclick="NT2.App._addAnnouncementModal('past')">
                 <span class="material-symbols-rounded" style="font-size:15px">add</span>ເພີ່ມ
               </button>
             </div>
@@ -424,7 +490,13 @@
                   <div class="timeline-item">
                     <div class="timeline-dot"></div>
                     <div class="timeline-content">
-                      <div class="timeline-date">${fmtDate(a.date)}</div>
+                      <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div class="timeline-date"><span class="timeline-num">${a._num}</span> ${fmtDate(a.date)}</div>
+                        ${a.rowNum ? `<div class="admin-only" style="display:flex;gap:4px">
+                          <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ທົ່ວໄປ','${(a.title||a.activity||'').replace(/'/g,"\\'")}','${(a.content||a.detail||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
+                          <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||a.activity||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
+                        </div>` : ''}
+                      </div>
                       <div class="timeline-title">${a.title || a.activity || 'ການເຄື່ອນໄຫວ'}</div>
                       <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:4px">${a.content || a.detail || ''}</div>
                     </div>
@@ -447,8 +519,142 @@
       });
     },
 
-    _addAnnouncement(type) { showToast('ຕ້ອງການເພີ່ມຂໍ້ມູນໃສ່ Google Sheet ໂດຍກົງ ແລ້ວ refresh.', 'info'); },
-    _addActivity()         { showToast('ຕ້ອງການເພີ່ມຂໍ້ມູນໃສ່ Google Sheet ໂດຍກົງ ແລ້ວ refresh.', 'info'); },
+    _addAnnouncementModal(defaultType) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const isPast = defaultType === 'past';
+      const selectedType = isPast ? 'ທົ່ວໄປ' : (defaultType === 'urgent' ? 'ດ່ວນ' : 'ທົ່ວໄປ');
+
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay active dynamic-modal';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:480px">
+          <div class="modal-header">
+            <h3 class="modal-title"><span class="material-symbols-rounded">campaign</span> ເພີ່ມແຈ້ງການ / ການເຄື່ອນໄຫວ</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">ວັນທີ</label>
+              <input type="date" class="form-input" id="annDate" value="${todayStr}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">ປະເພດ</label>
+              <select class="form-select" id="annType">
+                <option value="ດ່ວນ" ${selectedType === 'ດ່ວນ' ? 'selected' : ''}>ດ່ວນ</option>
+                <option value="ທົ່ວໄປ" ${selectedType === 'ທົ່ວໄປ' ? 'selected' : ''}>ທົ່ວໄປ</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">ຫົວຂໍ້</label>
+              <input type="text" class="form-input" id="annTitle" placeholder="ໃສ່ຫົວຂໍ້ແຈ້ງການ">
+            </div>
+            <div class="form-group">
+              <label class="form-label">ເນື້ອໃນ</label>
+              <textarea class="form-textarea" id="annContent" placeholder="ໃສ່ເນື້ອໃນແຈ້ງການ"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
+            <button class="btn btn-primary" id="saveAnnBtn">ບັນທຶກ</button>
+          </div>
+        </div>`;
+
+      overlay.querySelector('#saveAnnBtn').onclick = async () => {
+        const date    = overlay.querySelector('#annDate').value;
+        const type    = overlay.querySelector('#annType').value;
+        const title   = overlay.querySelector('#annTitle').value.trim();
+        const content = overlay.querySelector('#annContent').value.trim();
+
+        if (!title) { showToast('ກະລຸນາໃສ່ຫົວຂໍ້ແຈ້ງການ', 'error'); return; }
+
+        showToast('ກຳລັງບັນທຶກໃສ່ Google Sheet...', 'info');
+        const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+        const ok = await NT2.Data.addAnnouncement(selectedYear, { date, type, title, content });
+        if (ok) {
+          showToast('ເພີ່ມແຈ້ງການສຳເລັດ!', 'success');
+          overlay.remove();
+          this.loadPage('dashboard');
+        } else {
+          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+        }
+      };
+
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    },
+
+    _editAnnouncementModal(rowNum, date, typeLabel, title, content) {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay active dynamic-modal';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:480px">
+          <div class="modal-header">
+            <h3 class="modal-title"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂແຈ້ງການ / ການເຄື່ອນໄຫວ</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">ວັນທີ</label>
+              <input type="date" class="form-input" id="editAnnDate" value="${date}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">ປະເພດ</label>
+              <select class="form-select" id="editAnnType">
+                <option value="ດ່ວນ" ${typeLabel === 'ດ່ວນ' ? 'selected' : ''}>ດ່ວນ</option>
+                <option value="ທົ່ວໄປ" ${typeLabel !== 'ດ່ວນ' ? 'selected' : ''}>ທົ່ວໄປ</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">ຫົວຂໍ້</label>
+              <input type="text" class="form-input" id="editAnnTitle" value="${title}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">ເນື້ອໃນ</label>
+              <textarea class="form-textarea" id="editAnnContent">${content}</textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
+            <button class="btn btn-primary" id="updateAnnBtn">ບັນທຶກການແກ້ໄຂ</button>
+          </div>
+        </div>`;
+
+      overlay.querySelector('#updateAnnBtn').onclick = async () => {
+        const dateVal    = overlay.querySelector('#editAnnDate').value;
+        const typeVal    = overlay.querySelector('#editAnnType').value;
+        const titleVal   = overlay.querySelector('#editAnnTitle').value.trim();
+        const contentVal = overlay.querySelector('#editAnnContent').value.trim();
+
+        if (!titleVal) { showToast('ກະລຸນາໃສ່ຫົວຂໍ້ແຈ້ງການ', 'error'); return; }
+
+        showToast('ກຳລັງບັນທຶກການແກ້ໄຂໃສ່ Google Sheet...', 'info');
+        const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+        const ok = await NT2.Data.updateAnnouncement(selectedYear, { rowNum, date: dateVal, type: typeVal, title: titleVal, content: contentVal });
+        if (ok) {
+          showToast('ແກ້ໄຂແຈ້ງການສຳເລັດ!', 'success');
+          overlay.remove();
+          this.loadPage('dashboard');
+        } else {
+          showToast('ບໍ່ສາມາດແກ້ໄຂໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+        }
+      };
+
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    },
+
+    async _deleteAnnouncement(rowNum, title) {
+      if (!confirm(`ທ່ານຕ້ອງການລຶບແຈ້ງການ: "${title}" ແທ້ບໍ?`)) return;
+      showToast('ກຳລັງລຶບ...', 'info');
+      const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await NT2.Data.deleteAnnouncement(selectedYear, { rowNum, title });
+      if (ok) {
+        showToast('ລຶບແຈ້ງການສຳເລັດ!', 'success');
+        this.loadPage('dashboard');
+      } else {
+        showToast('ບໍ່ສາມາດລຶບໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+      }
+    },
 
     /* ── ACADEMIC YEAR ───────────────────── */
     renderAcademicYear(container) {
@@ -460,7 +666,7 @@
           <div class="page-header">
             <h2 class="page-title">ສົກຮຽນ</h2>
             <div class="page-actions">
-              <a href="https://docs.google.com/spreadsheets/d/1hamFjOzjlaq_sa3BY7WFgZhELXMboJHBt4S_D3HdRfY/edit" target="_blank" class="btn btn-secondary admin-only">
+              <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
                 <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂໃນ Google Sheet
               </a>
             </div>
@@ -572,7 +778,10 @@
                 <span class="material-symbols-rounded">search</span>
                 <input type="text" placeholder="ຄົ້ນຫາຊື່, ຕຳແໜ່ງ, ວິຊາ..." id="teacherSearch">
               </div>
-              <a href="https://docs.google.com/spreadsheets/d/1hamFjOzjlaq_sa3BY7WFgZhELXMboJHBt4S_D3HdRfY/edit" target="_blank" class="btn btn-secondary admin-only">
+              <button class="btn btn-primary admin-only" onclick="NT2.App._addTeacherModal()">
+                <span class="material-symbols-rounded">person_add</span>ເພີ່ມຄູອາຈານ
+              </button>
+              <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
                 <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂໃນ Sheet
               </a>
             </div>
@@ -598,10 +807,14 @@
         const displayName = t.nameLao || t.nameEn || '—';
         const displaySubName = (t.nameLao && t.nameEn) ? t.nameEn : '';
         const initialChar = initials(displayName);
+        const escapedName = (displayName).replace(/'/g, "\\'");
+        const escapedSub  = (t.position || t.subject || '').replace(/'/g, "\\'");
 
         return `
         <div class="person-card">
-          <div class="person-avatar ${t.gender === 'F' ? 'female' : ''}">
+          <div class="person-avatar ${t.gender === 'F' ? 'female' : ''}" 
+               title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່" 
+               onclick="event.stopPropagation(); NT2.App.zoomImage('${t.photoUrl||''}', '${escapedName}', '${escapedSub}')">
             ${t.photoUrl && t.photoUrl.trim().startsWith('http')
               ? `<img src="${t.photoUrl.trim()}" onerror="this.parentElement.textContent='${initialChar}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
               : initialChar}
@@ -613,12 +826,124 @@
             ${t.subject ? `<div class="person-detail" title="ວິຊາສອນ"><span class="material-symbols-rounded">menu_book</span>${t.subject}</div>` : ''}
             <div class="person-detail" title="ເບີໂທ"><span class="material-symbols-rounded">call</span>${t.phone || '—'}</div>
             <div class="person-actions admin-only">
-              <button class="edit-btn" title="ແກ້ໄຂ"><span class="material-symbols-rounded">edit</span></button>
-              <button class="delete-btn" title="ລຶບ"><span class="material-symbols-rounded">delete</span></button>
+              <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editTeacherModal('${t.rowNum||''}','${(t.photoUrl||'').replace(/'/g,"\\'")}','${(t.nameLao||'').replace(/'/g,"\\'")}','${(t.nameEn||'').replace(/'/g,"\\'")}','${(t.position||'').replace(/'/g,"\\'")}','${(t.subject||'').replace(/'/g,"\\'")}','${(t.phone||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂ</button>
+              <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteTeacher('${t.rowNum||''}','${(t.nameLao||'').replace(/'/g,"\\'")}','${(t.nameEn||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">delete</span> ລຶບ</button>
             </div>
           </div>
         </div>`;
       }).join('');
+    },
+
+    _addTeacherModal() {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay active dynamic-modal';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:500px">
+          <div class="modal-header">
+            <h3 class="modal-title"><span class="material-symbols-rounded">person_add</span> ເພີ່ມຂໍ້ມູນຄູອາຈານ</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group"><label class="form-label">ຮູບພາບ (Link URL)</label><input type="text" class="form-input" id="addTPhoto" placeholder="https://..."></div>
+            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາລາວ)</label><input type="text" class="form-input" id="addTNameLao" placeholder="ໃສ່ຊື່ພາສາລາວ"></div>
+            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາອັງກິດ)</label><input type="text" class="form-input" id="addTNameEn" placeholder="ໃສ່ຊື່ພາສາອັງກິດ"></div>
+            <div class="form-group"><label class="form-label">ຕຳແໜ່ງ</label><input type="text" class="form-input" id="addTPosition" placeholder="ໃສ່ຕຳແໜ່ງ (ເຊັ່ນ: ຄູສອນ)"></div>
+            <div class="form-group"><label class="form-label">ວິຊາສອນ</label><input type="text" class="form-input" id="addTSubject" placeholder="ໃສ່ວິຊາສອນ (ເຊັ່ນ: ຄະນິດສາດ)"></div>
+            <div class="form-group"><label class="form-label">ເບີໂທ</label><input type="text" class="form-input" id="addTPhone" placeholder="ໃສ່ເບີໂທ (ເຊັ່ນ: 020 5555 1234)"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
+            <button class="btn btn-primary" id="saveTeacherBtn">ບັນທຶກລົງ Sheet</button>
+          </div>
+        </div>`;
+
+      overlay.querySelector('#saveTeacherBtn').onclick = async () => {
+        const photoUrl = overlay.querySelector('#addTPhoto').value.trim();
+        const nameLao  = overlay.querySelector('#addTNameLao').value.trim();
+        const nameEn   = overlay.querySelector('#addTNameEn').value.trim();
+        const position = overlay.querySelector('#addTPosition').value.trim();
+        const subject  = overlay.querySelector('#addTSubject').value.trim();
+        const phone    = overlay.querySelector('#addTPhone').value.trim();
+
+        if (!nameLao && !nameEn) { showToast('ກະລຸນາໃສ່ຊື່ຄູອາຈານ', 'error'); return; }
+
+        showToast('ກຳລັງບັນທຶກລົງ Google Sheet...', 'info');
+        const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+        const ok = await NT2.Data.addTeacher(selectedYear, { photoUrl, nameLao, nameEn, position, subject, phone });
+        if (ok) {
+          showToast('ເພີ່ມຂໍ້ມູນຄູອາຈານສຳເລັດ!', 'success');
+          overlay.remove();
+          this.loadPage('teachers');
+        } else {
+          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+        }
+      };
+
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    },
+
+    _editTeacherModal(rowNum, photoUrl, nameLao, nameEn, position, subject, phone) {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay active dynamic-modal';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:500px">
+          <div class="modal-header">
+            <h3 class="modal-title"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂຂໍ້ມູນຄູອາຈານ</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group"><label class="form-label">ຮູບພາບ (Link URL)</label><input type="text" class="form-input" id="editTPhoto" value="${photoUrl}"></div>
+            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາລາວ)</label><input type="text" class="form-input" id="editTNameLao" value="${nameLao}"></div>
+            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາອັງກິດ)</label><input type="text" class="form-input" id="editTNameEn" value="${nameEn}"></div>
+            <div class="form-group"><label class="form-label">ຕຳແໜ່ງ</label><input type="text" class="form-input" id="editTPosition" value="${position}"></div>
+            <div class="form-group"><label class="form-label">ວິຊາສອນ</label><input type="text" class="form-input" id="editTSubject" value="${subject}"></div>
+            <div class="form-group"><label class="form-label">ເບີໂທ</label><input type="text" class="form-input" id="editTPhone" value="${phone}"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
+            <button class="btn btn-primary" id="updateTeacherBtn">ບັນທຶກການແກ້ໄຂ</button>
+          </div>
+        </div>`;
+
+      overlay.querySelector('#updateTeacherBtn').onclick = async () => {
+        const photoVal    = overlay.querySelector('#editTPhoto').value.trim();
+        const nameLaoVal  = overlay.querySelector('#editTNameLao').value.trim();
+        const nameEnVal   = overlay.querySelector('#editTNameEn').value.trim();
+        const positionVal = overlay.querySelector('#editTPosition').value.trim();
+        const subjectVal  = overlay.querySelector('#editTSubject').value.trim();
+        const phoneVal    = overlay.querySelector('#editTPhone').value.trim();
+
+        if (!nameLaoVal && !nameEnVal) { showToast('ກະລຸນາໃສ່ຊື່ຄູອາຈານ', 'error'); return; }
+
+        showToast('ກຳລັງບັນທຶກການແກ້ໄຂລົງ Google Sheet...', 'info');
+        const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+        const ok = await NT2.Data.updateTeacher(selectedYear, { rowNum, photoUrl: photoVal, nameLao: nameLaoVal, nameEn: nameEnVal, position: positionVal, subject: subjectVal, phone: phoneVal });
+        if (ok) {
+          showToast('ແກ້ໄຂຂໍ້ມູນຄູອາຈານສຳເລັດ!', 'success');
+          overlay.remove();
+          this.loadPage('teachers');
+        } else {
+          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+        }
+      };
+
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    },
+
+    async _deleteTeacher(rowNum, nameLao, nameEn) {
+      const name = nameLao || nameEn || '';
+      if (!confirm(`ທ່ານຕ້ອງການລຶບຂໍ້ມູນຄູອາຈານ: "${name}" ແທ້ບໍ?`)) return;
+      showToast('ກຳລັງລຶບຂໍ້ມູນອອກຈາກ Google Sheet...', 'info');
+      const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await NT2.Data.deleteTeacher(selectedYear, { rowNum, nameLao, nameEn });
+      if (ok) {
+        showToast('ລຶບຂໍ້ມູນຄູອາຈານສຳເລັດ!', 'success');
+        this.loadPage('teachers');
+      } else {
+        showToast('ບໍ່ສາມາດລຶບໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+      }
     },
 
     /* ── STUDENTS ────────────────────────── */
@@ -648,7 +973,10 @@
                   ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
                 </optgroup>
               </select>
-              <a href="https://docs.google.com/spreadsheets/d/1hamFjOzjlaq_sa3BY7WFgZhELXMboJHBt4S_D3HdRfY/edit" target="_blank" class="btn btn-secondary admin-only">
+              <button class="btn btn-primary admin-only" onclick="NT2.App._addStudentModal()">
+                <span class="material-symbols-rounded">person_add</span>ເພີ່ມນັກຮຽນ
+              </button>
+              <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
                 <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂໃນ Sheet
               </a>
             </div>
@@ -699,12 +1027,16 @@
       return list.map((s, i) => {
         const displayName = s.nameLao || s.nameEn || '—';
         const initialChar = initials(displayName);
+        const escapedName = displayName.replace(/'/g, "\\'");
+        const escapedSub  = (s.className ? 'ຫ້ອງ ' + s.className : '').replace(/'/g, "\\'");
 
         return `
         <tr>
           <td style="color:var(--text-muted)">${i + 1}</td>
           <td>
-            <div class="person-avatar" style="width:36px;height:36px;font-size:0.9rem">
+            <div class="person-avatar" style="width:36px;height:36px;font-size:0.9rem"
+                 title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່"
+                 onclick="event.stopPropagation(); NT2.App.zoomImage('${s.photoUrl||''}', '${escapedName}', '${escapedSub}')">
               ${s.photoUrl && s.photoUrl.trim().startsWith('http')
                 ? `<img src="${s.photoUrl.trim()}" onerror="this.parentElement.textContent='${initialChar}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
                 : initialChar}
@@ -714,11 +1046,143 @@
           <td style="color:var(--text-secondary);font-size:0.82rem;font-family:'Inter'">${s.nameEn || '—'}</td>
           <td><span class="chip" style="pointer-events:none">${s.className || '—'}</span></td>
           <td class="admin-only">
-            <button class="edit-btn" title="ແກ້ໄຂ"><span class="material-symbols-rounded">edit</span></button>
-            <button class="delete-btn" title="ລຶບ"><span class="material-symbols-rounded">delete</span></button>
+            <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editStudentModal('${s.rowNum||''}','${(s.photoUrl||'').replace(/'/g,"\\'")}','${(s.nameLao||'').replace(/'/g,"\\'")}','${(s.nameEn||'').replace(/'/g,"\\'")}','${(s.className||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂ</button>
+            <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteStudent('${s.rowNum||''}','${(s.nameLao||'').replace(/'/g,"\\'")}','${(s.nameEn||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">delete</span> ລຶບ</button>
           </td>
         </tr>`;
       }).join('');
+    },
+
+    _addStudentModal() {
+      const classes = NT2.Data.getAllClasses();
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay active dynamic-modal';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:500px">
+          <div class="modal-header">
+            <h3 class="modal-title"><span class="material-symbols-rounded">person_add</span> ເພີ່ມຂໍ້ມູນນັກຮຽນ</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group"><label class="form-label">ຮູບພາບ (Link URL)</label><input type="text" class="form-input" id="addSPhoto" placeholder="https://..."></div>
+            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາລາວ)</label><input type="text" class="form-input" id="addSNameLao" placeholder="ໃສ່ຊື່ພາສາລາວ"></div>
+            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາອັງກິດ)</label><input type="text" class="form-input" id="addSNameEn" placeholder="ໃສ່ຊື່ພາສາອັງກິດ"></div>
+            <div class="form-group">
+              <label class="form-label">ຊັ້ນ/ຫ້ອງ</label>
+              <select class="form-select" id="addSClass">
+                <optgroup label="ອະນຸບານ">
+                  ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
+                </optgroup>
+                <optgroup label="ປະຖົມ">
+                  ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
+                </optgroup>
+                <optgroup label="ມັດທະຍົມ">
+                  ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
+                </optgroup>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
+            <button class="btn btn-primary" id="saveStudentBtn">ບັນທຶກລົງ Sheet</button>
+          </div>
+        </div>`;
+
+      overlay.querySelector('#saveStudentBtn').onclick = async () => {
+        const photoUrl  = overlay.querySelector('#addSPhoto').value.trim();
+        const nameLao   = overlay.querySelector('#addSNameLao').value.trim();
+        const nameEn    = overlay.querySelector('#addSNameEn').value.trim();
+        const className = overlay.querySelector('#addSClass').value;
+
+        if (!nameLao && !nameEn) { showToast('ກະລຸນາໃສ່ຊື່ນັກຮຽນ', 'error'); return; }
+
+        showToast('ກຳລັງບັນທຶກລົງ Google Sheet...', 'info');
+        const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+        const ok = await NT2.Data.addStudent(selectedYear, { photoUrl, nameLao, nameEn, className });
+        if (ok) {
+          showToast('ເພີ່ມຂໍ້ມູນນັກຮຽນສຳເລັດ!', 'success');
+          overlay.remove();
+          this.loadPage('students');
+        } else {
+          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+        }
+      };
+
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    },
+
+    _editStudentModal(rowNum, photoUrl, nameLao, nameEn, className) {
+      const classes = NT2.Data.getAllClasses();
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay active dynamic-modal';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:500px">
+          <div class="modal-header">
+            <h3 class="modal-title"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂຂໍ້ມູນນັກຮຽນ</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group"><label class="form-label">ຮູບພາບ (Link URL)</label><input type="text" class="form-input" id="editSPhoto" value="${photoUrl}"></div>
+            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາລາວ)</label><input type="text" class="form-input" id="editSNameLao" value="${nameLao}"></div>
+            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາອັງກິດ)</label><input type="text" class="form-input" id="editSNameEn" value="${nameEn}"></div>
+            <div class="form-group">
+              <label class="form-label">ຊັ້ນ/ຫ້ອງ</label>
+              <select class="form-select" id="editSClass">
+                <optgroup label="ອະນຸບານ">
+                  ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${c.name}" ${className === c.name ? 'selected' : ''}>${c.fullName}</option>`).join('')}
+                </optgroup>
+                <optgroup label="ປະຖົມ">
+                  ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${c.name}" ${className === c.name ? 'selected' : ''}>${c.fullName}</option>`).join('')}
+                </optgroup>
+                <optgroup label="ມັດທະຍົມ">
+                  ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${c.name}" ${className === c.name ? 'selected' : ''}>${c.fullName}</option>`).join('')}
+                </optgroup>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
+            <button class="btn btn-primary" id="updateStudentBtn">ບັນທຶກການແກ້ໄຂ</button>
+          </div>
+        </div>`;
+
+      overlay.querySelector('#updateStudentBtn').onclick = async () => {
+        const photoVal     = overlay.querySelector('#editSPhoto').value.trim();
+        const nameLaoVal   = overlay.querySelector('#editSNameLao').value.trim();
+        const nameEnVal    = overlay.querySelector('#editSNameEn').value.trim();
+        const classNameVal = overlay.querySelector('#editSClass').value;
+
+        if (!nameLaoVal && !nameEnVal) { showToast('ກະລຸນາໃສ່ຊື່ນັກຮຽນ', 'error'); return; }
+
+        showToast('ກຳລັງບັນທຶກການແກ້ໄຂໃສ່ Google Sheet...', 'info');
+        const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+        const ok = await NT2.Data.updateStudent(selectedYear, { rowNum, photoUrl: photoVal, nameLao: nameLaoVal, nameEn: nameEnVal, className: classNameVal });
+        if (ok) {
+          showToast('ແກ້ໄຂຂໍ້ມູນນັກຮຽນສຳເລັດ!', 'success');
+          overlay.remove();
+          this.loadPage('students');
+        } else {
+          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+        }
+      };
+
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    },
+
+    async _deleteStudent(rowNum, nameLao, nameEn) {
+      const name = nameLao || nameEn || '';
+      if (!confirm(`ທ່ານຕ້ອງການລຶບຂໍ້ມູນນັກຮຽນ: "${name}" ແທ້ບໍ?`)) return;
+      showToast('ກຳລັງລຶບຂໍ້ມູນນັກຮຽນອອກຈາກ Google Sheet...', 'info');
+      const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await NT2.Data.deleteStudent(selectedYear, { rowNum, nameLao, nameEn });
+      if (ok) {
+        showToast('ລຶບຂໍ້ມູນນັກຮຽນສຳເລັດ!', 'success');
+        this.loadPage('students');
+      } else {
+        showToast('ບໍ່ສາມາດລຶບໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+      }
     },
 
     /* ── SCORES ──────────────────────────── */
@@ -796,7 +1260,7 @@
                 <button class="btn btn-warning" onclick="NT2.App._showGradingRules()">
                   <span class="material-symbols-rounded">rule</span>ກົດລະບຽບຕັດຄະແນນ
                 </button>`}
-              <a href="https://docs.google.com/spreadsheets/d/1hamFjOzjlaq_sa3BY7WFgZhELXMboJHBt4S_D3HdRfY/edit" target="_blank" class="btn btn-secondary admin-only">
+              <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
                 <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂລິ້ງ
               </a>
             </div>
@@ -804,6 +1268,82 @@
           ${classGroups.map(renderGroup).join('')}
         </div>`;
     },
+
+    /* ── ATTENDANCE ───────────────────────── */
+    async renderAttendance(container) {
+      const selectedYear = localStorage.getItem('nt2_selected_year') || '';
+      const links = await NT2.Data.fetchAttendanceLinksForYear(selectedYear);
+
+      const classGroups = [
+        {
+          label: 'ອະນຸບານ',
+          icon: 'child_care',
+          items: [
+            { code: 'ອ1', name: 'ອະນຸບານ 1', url: links['ອ1'] || '#' },
+            { code: 'ອ2', name: 'ອະນຸບານ 2', url: links['ອ2'] || '#' },
+            { code: 'ອ3', name: 'ອະນຸບານ 3', url: links['ອ3'] || '#' }
+          ]
+        },
+        {
+          label: 'ປະຖົມສຶກສາ',
+          icon: 'menu_book',
+          items: [
+            { code: 'ປ1', name: 'ປະຖົມ 1', url: links['ປ1'] || '#' },
+            { code: 'ປ2', name: 'ປະຖົມ 2', url: links['ປ2'] || '#' },
+            { code: 'ປ3', name: 'ປະຖົມ 3', url: links['ປ3'] || '#' },
+            { code: 'ປ4', name: 'ປະຖົມ 4', url: links['ປ4'] || '#' },
+            { code: 'ປ5', name: 'ປະຖົມ 5', url: links['ປ5'] || '#' }
+          ]
+        },
+        {
+          label: 'ມັດທະຍົມສຶກສາ',
+          icon: 'school',
+          items: [
+            { code: 'ມ1', name: 'ມັດທະຍົມ 1', url: links['ມ1'] || '#' },
+            { code: 'ມ2', name: 'ມັດທະຍົມ 2', url: links['ມ2'] || '#' },
+            { code: 'ມ3', name: 'ມັດທະຍົມ 3', url: links['ມ3'] || '#' },
+            { code: 'ມ4', name: 'ມັດທະຍົມ 4', url: links['ມ4'] || '#' },
+            { code: 'ມ5', name: 'ມັດທະຍົມ 5', url: links['ມ5'] || '#' },
+            { code: 'ມ6', name: 'ມັດທະຍົມ 6', url: links['ມ6'] || '#' },
+            { code: 'ມ7', name: 'ມັດທະຍົມ 7', url: links['ມ7'] || '#' }
+          ]
+        }
+      ];
+
+      const renderGroup = group => `
+        <div class="scores-section">
+          <h3 class="scores-section-title">
+            <span class="material-symbols-rounded">${group.icon}</span>${group.label}
+          </h3>
+          <div class="scores-grid">
+            ${group.items.map(item => {
+              const hasUrl = item.url && item.url !== '#' && item.url.trim().startsWith('http');
+              const finalUrl = hasUrl ? item.url.trim() : '#';
+              return `
+                <a href="${finalUrl}" target="${hasUrl ? '_blank' : '_self'}" class="score-btn"
+                   ${!hasUrl ? 'onclick="event.preventDefault();NT2.App._noAttendanceLink()"' : ''}>
+                  <span class="class-label">${item.name}</span>
+                  <span class="view-label">${hasUrl ? 'ເບິ່ງການມາຮຽນ ›' : 'ຍັງບໍ່ທັນມີລິ້ງ'}</span>
+                </a>`;
+            }).join('')}
+          </div>
+        </div>`;
+
+      container.innerHTML = `
+        <div class="page-container fade-in">
+          <div class="page-header">
+            <h2 class="page-title">ຕິດຕາມການມາຮຽນ ${selectedYear ? `(${selectedYear})` : ''}</h2>
+            <div class="page-actions">
+              <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
+                <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂລິ້ງ
+              </a>
+            </div>
+          </div>
+          ${classGroups.map(renderGroup).join('')}
+        </div>`;
+    },
+
+    _noAttendanceLink() { showToast('ຍັງບໍ່ທັນໄດ້ໃສ່ລິ້ງ — ກະລຸນາໃສ່ URL ໃນ Google Sheet (ແຖວ 3)', 'info'); },
 
     _noLink() { showToast('ຍັງບໍ່ທັນໄດ້ໃສ່ລິ້ງ — ກະລຸນາໃສ່ URL ໃນ Google Sheet tab "scores_links"', 'info'); },
 
@@ -857,20 +1397,22 @@
       const teach = sched.teachingSchedule || [];
 
       const tableHTML = rows => {
-        if (!rows || !rows.length) {
+        const cleanRows = (rows || []).filter(r => {
+          if (!r) return false;
+          const time = (r.time || '').trim();
+          const mon  = (r.mon  || '').trim();
+          if (time === 'ເວລາ' || mon === 'ວັນຈັນ') return false;
+          return true;
+        });
+
+        if (!cleanRows.length) {
           return '<div style="text-align:center;padding:30px;color:var(--text-muted)">ບໍ່ພົບຂໍ້ມູນຕາຕະລາງ</div>';
         }
         return `
         <div class="table-wrapper">
           <table class="schedule-table">
-            <thead>
-              <tr>
-                <th class="time-col">ເວລາ</th>
-                <th>ວັນຈັນ</th><th>ວັນອັງຄານ</th><th>ວັນພຸດ</th><th>ວັນພະຫັດ</th><th>ວັນສຸກ</th>
-              </tr>
-            </thead>
             <tbody>
-              ${rows.map(r => `
+              ${cleanRows.map(r => `
                 <tr class="${r.isBreak ? 'break-row' : ''}">
                   <td class="time-col">${r.time || '—'}</td>
                   ${r.isBreak
@@ -886,7 +1428,7 @@
         <div class="page-container fade-in">
           <div class="page-header">
             <h2 class="page-title">ຕາຕະລາງ ${selectedYear ? `(${selectedYear})` : ''}</h2>
-            <a href="https://docs.google.com/spreadsheets/d/1hamFjOzjlaq_sa3BY7WFgZhELXMboJHBt4S_D3HdRfY/edit" target="_blank" class="btn btn-secondary admin-only">
+            <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
               <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂໃນ Sheet
             </a>
           </div>
@@ -985,12 +1527,16 @@
                     ${list.map((s, i) => {
                       const displayName = s.nameLao || s.nameEn || '—';
                       const initialChar = initials(displayName);
+                      const escapedName = displayName.replace(/'/g, "\\'");
+                      const escapedSub  = (fullName || '').replace(/'/g, "\\'");
 
                       return `
                       <tr>
                         <td style="color:var(--text-muted)">${i + 1}</td>
                         <td>
-                          <div class="person-avatar" style="width:32px;height:32px;font-size:0.8rem">
+                          <div class="person-avatar" style="width:32px;height:32px;font-size:0.8rem;cursor:pointer"
+                               title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່"
+                               onclick="event.stopPropagation(); NT2.App.zoomImage('${s.photoUrl||''}', '${escapedName}', '${escapedSub}')">
                             ${s.photoUrl && s.photoUrl.trim().startsWith('http')
                               ? `<img src="${s.photoUrl.trim()}" onerror="this.parentElement.textContent='${initialChar}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
                               : initialChar}

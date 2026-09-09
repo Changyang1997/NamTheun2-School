@@ -29,16 +29,6 @@
               <div id="study-tab" class="tab-panel active slide-up">
                 <div class="table-wrapper">
                   <table class="schedule-table data-table" style="width:100%; border-collapse:collapse; min-width: 600px;">
-                    <thead>
-                      <tr style="background:var(--surface-variant)">
-                        <th class="time-col" style="padding:12px;border:1px solid var(--border)">ເວລາ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນຈັນ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນອັງຄານ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນພຸດ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນພະຫັດ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນສຸກ</th>
-                      </tr>
-                    </thead>
                     <tbody>
                       ${this._renderScheduleRows(studySchedule)}
                     </tbody>
@@ -48,16 +38,6 @@
               <div id="teach-tab" class="tab-panel slide-up hidden" style="display:none">
                 <div class="table-wrapper">
                   <table class="schedule-table data-table" style="width:100%; border-collapse:collapse; min-width: 600px;">
-                    <thead>
-                      <tr style="background:var(--surface-variant)">
-                        <th class="time-col" style="padding:12px;border:1px solid var(--border)">ເວລາ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນຈັນ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນອັງຄານ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນພຸດ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນພະຫັດ</th>
-                        <th style="padding:12px;border:1px solid var(--border)">ວັນສຸກ</th>
-                      </tr>
-                    </thead>
                     <tbody>
                       ${this._renderScheduleRows(teachingSchedule)}
                     </tbody>
@@ -102,10 +82,18 @@
     },
     
     _renderScheduleRows(scheduleData) {
-      if (!scheduleData || scheduleData.length === 0) {
+      const cleanRows = (scheduleData || []).filter(r => {
+        if (!r) return false;
+        const time = (r.time || '').trim();
+        const mon  = (r.mon  || '').trim();
+        if (time === 'ເວລາ' || mon === 'ວັນຈັນ') return false;
+        return true;
+      });
+
+      if (!cleanRows || cleanRows.length === 0) {
         return '<tr><td colspan="6" class="text-center text-muted" style="padding:16px;border:1px solid var(--border)">ບໍ່ມີຂໍ້ມູນ</td></tr>';
       }
-      return scheduleData.map(row => {
+      return cleanRows.map(row => {
         if (row.isBreak) {
           return `
             <tr class="break-row" style="background:var(--surface-variant)">

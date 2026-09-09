@@ -1,8 +1,8 @@
-(function () {
+﻿(function () {
   const NT2 = window.NT2 = window.NT2 || {};
 
-  const SHEET_ID   = '1hamFjOzjlaq_sa3BY7WFgZhELXMboJHBt4S_D3HdRfY';
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyPnn4E94WtZaStmzCiRAwtoRb4Vx7sw9x7Kv5wpryxgO2Nf3WCKy1hQzHupkYBT345/exec';
+  const SHEET_ID   = '1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwY5RcFeBzc5HKyEsmEBGby15KT58mSdtx_fZTva7CG8rXOCQtP01KaPJ-i9KDJIWDlPQ/exec';
   const AUTO_REFRESH_MS = 3 * 60 * 1000; // 3 minutes
 
   /* ─────────────────────────────────────────
@@ -279,6 +279,9 @@
                 if (item.scoreLinks) {
                   this.setScoreLinksForYear(item.name, item.scoreLinks);
                 }
+                if (item.attendanceLinks) {
+                  this.setAttendanceLinksForYear(item.name, item.attendanceLinks);
+                }
                 if (item.studySchedule || item.teachingSchedule) {
                   this.setScheduleForYear(item.name, {
                     studySchedule: item.studySchedule || [],
@@ -508,6 +511,7 @@
 
             return {
               id: i + 1,
+              rowNum: i + 6,
               photoUrl: String(photoUrl).trim(),
               nameLao: String(nameLao).trim(),
               nameEn: String(nameEn).trim(),
@@ -577,6 +581,7 @@
 
             return {
               id: i + 1,
+              rowNum: i + 6,
               photoUrl: String(photoUrl).trim(),
               nameLao: String(nameLao).trim(),
               nameEn: String(nameEn).trim(),
@@ -667,6 +672,76 @@
       } catch(e) {}
 
       return this.getScoreLinksForYear(year);
+    },
+
+    /* ── ATTENDANCE LINKS ─────────────────── */
+    _attendanceLinksByYearCache: {},
+
+    setAttendanceLinksForYear(year, links) {
+      if (!year || !links) return;
+      this._attendanceLinksByYearCache[year] = links;
+    },
+
+    getAttendanceLinksForYear(year) {
+      return this._attendanceLinksByYearCache[year] || {
+        "ອ1": "#", "ອ2": "#", "ອ3": "#",
+        "ປ1": "#", "ປ2": "#", "ປ3": "#", "ປ4": "#", "ປ5": "#",
+        "ມ1": "#", "ມ2": "#", "ມ3": "#", "ມ4": "#", "ມ5": "#", "ມ6": "#", "ມ7": "#",
+        "rules": "#"
+      };
+    },
+
+    async fetchAttendanceLinksForYear(year) {
+      if (!year) return this.getAttendanceLinksForYear(year);
+
+      if (this._attendanceLinksByYearCache[year]) {
+        return this._attendanceLinksByYearCache[year];
+      }
+
+      // Try Apps Script endpoint
+      try {
+        const res = await fetch(`${APPS_SCRIPT_URL}?action=getAttendanceLinks&sheet=${encodeURIComponent(year)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.status === 'success' && json.attendanceLinks) {
+            this.setAttendanceLinksForYear(year, json.attendanceLinks);
+            return json.attendanceLinks;
+          }
+        }
+      } catch (e) {}
+
+      // Fallback gviz fetch: Row 3 (index 1 in rows, since row 1 = headers)
+      try {
+        const rows = await fetchSheet(year);
+        if (rows && rows.length > 1) {
+          const r = rows[1]; // Row 3
+          const keys = Object.keys(r);
+
+          const links = {
+            "ອ1": r['col4']  || (keys[4]  ? r[keys[4]]  : '#'),
+            "ອ2": r['col5']  || (keys[5]  ? r[keys[5]]  : '#'),
+            "ອ3": r['col6']  || (keys[6]  ? r[keys[6]]  : '#'),
+            "ປ1": r['col8']  || (keys[8]  ? r[keys[8]]  : '#'),
+            "ປ2": r['col9']  || (keys[9]  ? r[keys[9]]  : '#'),
+            "ປ3": r['col10'] || (keys[10] ? r[keys[10]] : '#'),
+            "ປ4": r['col11'] || (keys[11] ? r[keys[11]] : '#'),
+            "ປ5": r['col12'] || (keys[12] ? r[keys[12]] : '#'),
+            "ມ1": r['col14'] || (keys[14] ? r[keys[14]] : '#'),
+            "ມ2": r['col15'] || (keys[15] ? r[keys[15]] : '#'),
+            "ມ3": r['col16'] || (keys[16] ? r[keys[16]] : '#'),
+            "ມ4": r['col17'] || (keys[17] ? r[keys[17]] : '#'),
+            "ມ5": r['col18'] || (keys[18] ? r[keys[18]] : '#'),
+            "ມ6": r['col19'] || (keys[19] ? r[keys[19]] : '#'),
+            "ມ7": r['col20'] || (keys[20] ? r[keys[20]] : '#'),
+            "rules": r['col23'] || (keys[23] ? r[keys[23]] : '#')
+          };
+
+          this.setAttendanceLinksForYear(year, links);
+          return links;
+        }
+      } catch(e) {}
+
+      return this.getAttendanceLinksForYear(year);
     },
 
     _schedulesByYearCache: {},
@@ -811,6 +886,194 @@
         classCount,
         announcements
       };
+    },
+
+    async _sendToAppsScript(params) {
+      const queryString = new URLSearchParams(params).toString();
+      const url = `${APPS_SCRIPT_URL}?${queryString}`;
+
+      // 1. Try standard CORS fetch
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
+        const res = await fetch(url, { method: 'GET', mode: 'cors', signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json && json.status === 'success') return true;
+        }
+      } catch (e) {}
+
+      // 2. Try no-cors fetch (dispatches HTTP GET to Google Apps Script without CORS blockage)
+      try {
+        await fetch(url, { method: 'GET', mode: 'no-cors' });
+      } catch (e) {}
+
+      // 3. Fallback to dynamic script injection (JSONP style, always succeeds in all browsers even under file:/// protocol)
+      return new Promise((resolve) => {
+        const callbackName = 'nt2_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        const script = document.createElement('script');
+        let resolved = false;
+
+        const cleanup = () => {
+          if (resolved) return;
+          resolved = true;
+          delete window[callbackName];
+          if (script.parentNode) script.remove();
+          resolve(true);
+        };
+
+        window[callbackName] = function() { cleanup(); };
+        script.src = `${url}&callback=${callbackName}&_t=${Date.now()}`;
+        script.onload = cleanup;
+        script.onerror = cleanup;
+        document.head.appendChild(script);
+
+        setTimeout(cleanup, 4500);
+      });
+    },
+
+    clearYearCache(year) {
+      if (!year) return;
+      delete this._teachersByYearCache[year];
+      delete this._studentsByYearCache[year];
+      delete this._dashboardByYearCache[year];
+      delete this._scheduleByYearCache[year];
+    },
+
+    async addTeacher(year, teacher) {
+      if (!year) year = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await this._sendToAppsScript({
+        action: 'addTeacher',
+        sheet: year,
+        photoUrl: teacher.photoUrl || '',
+        nameLao: teacher.nameLao || '',
+        nameEn: teacher.nameEn || '',
+        position: teacher.position || '',
+        subject: teacher.subject || '',
+        phone: teacher.phone || ''
+      });
+      delete this._teachersByYearCache[year];
+      delete this._dashboardByYearCache[year];
+      return ok;
+    },
+
+    async updateTeacher(year, teacher) {
+      if (!year) year = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await this._sendToAppsScript({
+        action: 'updateTeacher',
+        sheet: year,
+        rowNum: teacher.rowNum || teacher.row || '',
+        photoUrl: teacher.photoUrl || '',
+        nameLao: teacher.nameLao || '',
+        nameEn: teacher.nameEn || '',
+        position: teacher.position || '',
+        subject: teacher.subject || '',
+        phone: teacher.phone || ''
+      });
+      delete this._teachersByYearCache[year];
+      delete this._dashboardByYearCache[year];
+      return ok;
+    },
+
+    async deleteTeacher(year, teacher) {
+      if (!year) year = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await this._sendToAppsScript({
+        action: 'deleteTeacher',
+        sheet: year,
+        rowNum: teacher.rowNum || teacher.row || '',
+        nameLao: teacher.nameLao || '',
+        nameEn: teacher.nameEn || ''
+      });
+      delete this._teachersByYearCache[year];
+      delete this._dashboardByYearCache[year];
+      return ok;
+    },
+
+    async addStudent(year, student) {
+      if (!year) year = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await this._sendToAppsScript({
+        action: 'addStudent',
+        sheet: year,
+        photoUrl: student.photoUrl || '',
+        nameLao: student.nameLao || '',
+        nameEn: student.nameEn || '',
+        className: student.className || ''
+      });
+      delete this._studentsByYearCache[year];
+      delete this._dashboardByYearCache[year];
+      return ok;
+    },
+
+    async updateStudent(year, student) {
+      if (!year) year = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await this._sendToAppsScript({
+        action: 'updateStudent',
+        sheet: year,
+        rowNum: student.rowNum || student.row || '',
+        photoUrl: student.photoUrl || '',
+        nameLao: student.nameLao || '',
+        nameEn: student.nameEn || '',
+        className: student.className || ''
+      });
+      delete this._studentsByYearCache[year];
+      delete this._dashboardByYearCache[year];
+      return ok;
+    },
+
+    async deleteStudent(year, student) {
+      if (!year) year = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await this._sendToAppsScript({
+        action: 'deleteStudent',
+        sheet: year,
+        rowNum: student.rowNum || student.row || '',
+        nameLao: student.nameLao || '',
+        nameEn: student.nameEn || ''
+      });
+      delete this._studentsByYearCache[year];
+      delete this._dashboardByYearCache[year];
+      return ok;
+    },
+
+    async addAnnouncement(year, ann) {
+      if (!year) year = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await this._sendToAppsScript({
+        action: 'addAnnouncement',
+        sheet: year,
+        date: ann.date || '',
+        type: ann.type || 'ທົ່ວໄປ',
+        title: ann.title || '',
+        content: ann.content || ''
+      });
+      delete this._dashboardByYearCache[year];
+      return ok;
+    },
+
+    async updateAnnouncement(year, ann) {
+      if (!year) year = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await this._sendToAppsScript({
+        action: 'updateAnnouncement',
+        sheet: year,
+        rowNum: ann.rowNum || ann.row || '',
+        date: ann.date || '',
+        type: ann.type || 'ທົ່ວໄປ',
+        title: ann.title || '',
+        content: ann.content || ''
+      });
+      delete this._dashboardByYearCache[year];
+      return ok;
+    },
+
+    async deleteAnnouncement(year, ann) {
+      if (!year) year = localStorage.getItem('nt2_selected_year') || '';
+      const ok = await this._sendToAppsScript({
+        action: 'deleteAnnouncement',
+        sheet: year,
+        rowNum: ann.rowNum || ann.row || '',
+        title: ann.title || ''
+      });
+      delete this._dashboardByYearCache[year];
+      return ok;
     },
 
     getAllClasses() {
