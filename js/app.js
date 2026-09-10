@@ -5,14 +5,14 @@
      PAGE TITLES
   ───────────────────────────────────────── */
   const PAGE_TITLES = {
-    dashboard:     'ໜ້າຫຼັກ',
-    academic_year: 'ສົກຮຽນ',
-    teachers:      'ຄູອາຈານ',
-    students:      'ນັກຮຽນ',
-    scores:        'ຄະແນນ',
-    attendance:    'ຕິດຕາມການມາຮຽນ',
-    schedule:      'ຕາຕະລາງ',
-    classes:       'ຊັ້ນຮຽນ'
+    dashboard:     'page.dashboard',
+    academic_year: 'page.academic_year',
+    teachers:      'page.teachers',
+    students:      'page.students',
+    scores:        'page.scores',
+    attendance:    'page.attendance',
+    schedule:      'page.schedule',
+    classes:       'page.classes'
   };
 
   /* ─────────────────────────────────────────
@@ -20,7 +20,7 @@
   ───────────────────────────────────────── */
   function fmtDate(d) {
     if (!d) return '';
-    const months = ['ມັງກອນ','ກຸມພາ','ມີນາ','ເມສາ','ພຶດສະພາ','ມິຖຸນາ',
+    const months = window.NT2 && NT2.Lang ? NT2.Lang.t('months') : ['ມັງກອນ','ກຸມພາ','ມີນາ','ເມສາ','ພຶດສະພາ','ມິຖຸນາ',
                     'ກໍລະກົດ','ສິງຫາ','ກັນຍາ','ຕຸລາ','ພະຈິກ','ທັນວາ'];
     const dt = new Date(d);
     if (isNaN(dt)) return d;
@@ -43,6 +43,8 @@
     setTimeout(() => { t.style.opacity='0'; t.style.transform='translateY(10px)'; setTimeout(()=>t.remove(),300); }, 3000);
   }
 
+  const L = (key) => window.NT2 && NT2.Lang ? NT2.Lang.t(key) : key;
+
   /* ─────────────────────────────────────────
      APP
   ───────────────────────────────────────── */
@@ -53,18 +55,25 @@
     async init() {
       // Show loading
       const mc = document.getElementById('mainContent');
-      if (mc) mc.innerHTML = `<div class="loading-screen"><div class="loading-spinner"></div><p>ກຳລັງໂຫຼດຂໍ້ມູນ...</p></div>`;
+      if (mc) mc.innerHTML = `<div class="loading-screen"><div class="loading-spinner"></div><p>${L('loading')}</p></div>`;
 
+      NT2.Lang.init();
       await NT2.Data.init();
       NT2.Auth.init();
       this._bindEvents();
       this._initTheme();
+      NT2.Lang.applyLogin();
 
       // Re-render current page when data refreshes
       NT2.Data.onRefresh(() => {
-        showToast('ຂໍ້ມູນອັບເດດຈາກ Google Sheet ແລ້ວ!', 'success');
+        showToast(L('toast.refreshed'), 'success');
         this._initYearDropdown(); // refresh dropdown list
         this.loadPage(this.currentPage);
+      });
+
+      // Language toggle
+      document.getElementById('langToggleBtn')?.addEventListener('click', () => {
+        NT2.Lang.toggle();
       });
 
       this.loadPage('dashboard');
@@ -124,9 +133,9 @@
           document.getElementById('loginUsername').value = '';
           document.getElementById('loginPassword').value = '';
           this.loadPage(this.currentPage);
-          showToast('ເຂົ້າສູ່ລະບົບສຳເລັດ!', 'success');
+          showToast(L('login.success') + '!', 'success');
         } else {
-          err.innerText = 'ຊື່ຜູ້ໃຊ້ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ!';
+          err.innerText = L('login.invalid');
           err.classList.remove('hidden');
         }
       });
@@ -163,7 +172,10 @@
 
       // Set label to saved selection
       const label = document.getElementById('yearDropdownLabel');
-      if (label && saved) label.textContent = saved;
+      if (label && saved) {
+        label.textContent = saved;
+        label.dataset.custom = '1';
+      }
 
       // Update school header info (logo, name, subtitle) for initial year
       this.updateHeaderSchoolInfo(saved);
@@ -175,7 +187,10 @@
           const yr = item.dataset.year;
           localStorage.setItem('nt2_selected_year', yr);
           const lbl = document.getElementById('yearDropdownLabel');
-          if (lbl) lbl.textContent = yr;
+          if (lbl) {
+            lbl.textContent = yr;
+            lbl.dataset.custom = '1';
+          }
           menu.querySelectorAll('.year-dropdown-item').forEach(i => i.classList.remove('active'));
           item.classList.add('active');
           this._closeYearDropdown();
@@ -183,7 +198,7 @@
           // Update header info dynamically & reload page content
           await this.updateHeaderSchoolInfo(yr);
           this.loadPage(this.currentPage);
-          showToast(`ເລືອກສົກຮຽນ ${yr} ແລ້ວ`, 'success');
+          showToast(`${L('toast.year_selected')} ${yr}`, 'success');
         });
       });
     },
@@ -241,7 +256,7 @@
     _initTheme() { this._setTheme(localStorage.getItem('nt2_theme') || 'auto'); },
     _setTheme(theme) {
       const icons = { auto: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' };
-      const titles = { auto: 'ໂໝດອັດຕະໂນມັດ', light: 'ໂໝດສະຫວ່າງ', dark: 'ໂໝດມືດ' };
+      const titles = { auto: L('theme.auto'), light: L('theme.light'), dark: L('theme.dark') };
 
       // Apply class to body
       const body = document.body;
@@ -267,7 +282,7 @@
     /* ── IMAGE ZOOM / LIGHTBOX ───────────── */
     zoomImage(photoUrl, title, subtitle) {
       if (!photoUrl || !photoUrl.trim() || !photoUrl.trim().startsWith('http')) {
-        showToast('ບໍ່ມີຮູບພາບທີ່ຈະຂະຫຍາຍ', 'info');
+        showToast(L('zoom.no_image'), 'info');
         return;
       }
       const existing = document.querySelector('.image-zoom-overlay');
@@ -277,15 +292,15 @@
       overlay.className = 'image-zoom-overlay active';
       overlay.innerHTML = `
         <div class="zoom-image-container">
-          <button class="zoom-close-btn" title="ປິດ (ESC)"><span class="material-symbols-rounded">close</span></button>
+          <button class="zoom-close-btn" title="${L('zoom.close')}"><span class="material-symbols-rounded">close</span></button>
           <div class="zoom-image-wrapper">
-            <img src="${photoUrl.trim()}" alt="${title || 'ຮູບ'}" onerror="this.onerror=null;showToast('ບໍ່ສາມາດໂຫລດຮູບໄດ້','error');this.closest('.image-zoom-overlay').remove()">
+            <img src="${photoUrl.trim()}" alt="${title || L('zoom.image')}" onerror="this.onerror=null;showToast('${L('zoom.load_error')}','error');this.closest('.image-zoom-overlay').remove()">
           </div>
           ${(title || subtitle) ? `
           <div class="zoom-info">
             ${title ? `<div class="zoom-title">${title}</div>` : ''}
             ${subtitle ? `<div class="zoom-subtitle">${subtitle}</div>` : ''}
-            <div class="zoom-tip">ກົດບ່ອນຫວ່າງ ຫຼື ປຸ່ມປິດ ເພື່ອອອກ</div>
+            <div class="zoom-tip">${L('zoom.tip')}</div>
           </div>` : ''}
         </div>
       `;
@@ -324,7 +339,7 @@
 
       // Header title
       const titleEl = document.getElementById('headerTitle');
-      if (titleEl) titleEl.innerText = PAGE_TITLES[pageId] || 'ໜ້າຫຼັກ';
+      if (titleEl) titleEl.innerText = L(PAGE_TITLES[pageId] || 'page.dashboard');
 
       // Render
       const content = document.getElementById('mainContent');
@@ -344,6 +359,13 @@
       (renderers[pageId] || renderers.dashboard)();
     },
 
+    /* Re-apply translations + re-render current page (called on language switch) */
+    applyLang() {
+      const dt = window.NT2 && NT2.Data;
+      if (dt && typeof dt.refreshSyncLabel === 'function') dt.refreshSyncLabel();
+      this.loadPage(this.currentPage);
+    },
+
     /* ═══════════════════════════════════════
        RENDERERS
     ═══════════════════════════════════════ */
@@ -356,7 +378,6 @@
       const teachers      = dashData.teachers || [];
       const classCount    = dashData.classCount || 0;
       const announcements = dashData.announcements || [];
-      const isLive        = NT2.Data.isLive();
 
       const todayStr = new Date().toISOString().split('T')[0];
 
@@ -368,8 +389,8 @@
       };
 
       const activeAnnouncements = announcements.filter(a => !isPassed(a.date));
-      const urgent = activeAnnouncements.filter(a => a.type === 'urgent');
-      const normal = activeAnnouncements.filter(a => a.type === 'normal' || !a.type);
+      const urgent = activeAnnouncements.filter(a => a.type === 'urgent' || a.type === 'ດ່ວນ');
+      const normal = activeAnnouncements.filter(a => a.type === 'normal' || a.type === 'ທົ່ວໄປ' || !a.type);
 
       let pastActivities = announcements.filter(a => isPassed(a.date));
       if (!pastActivities || pastActivities.length === 0) {
@@ -384,16 +405,10 @@
         .sort((a, b) => String(b.date).localeCompare(String(a.date)));
       pastActivities.forEach((a, i) => { a._num = i + 1; });
 
-      container.innerHTML = `
+container.innerHTML = `
         <div class="page-container fade-in">
-          ${isLive ? '' : `<div class="sample-notice"><span class="material-symbols-rounded">info</span> ກຳລັງໃຊ້ຂໍ້ມູນຕົວຢ່າງ — ກະລຸນາ <strong>Publish</strong> Google Sheet ເພື່ອດຶງຂໍ້ມູນຈິງ</div>`}
-
           <div class="page-header">
-            <h2 class="page-title">ສະຖິຕິໂຮງຮຽນ ${selectedYear ? `(${selectedYear})` : ''}</h2>
-            <div class="data-badge ${isLive ? 'live' : 'sample'}">
-              <span class="material-symbols-rounded">${isLive ? 'cloud_done' : 'cloud_off'}</span>
-              ${isLive ? 'ຂໍ້ມູນ Live' : 'ຂໍ້ມູນຕົວຢ່າງ'}
-            </div>
+            <h2 class="page-title">${L('dash.title')} ${selectedYear ? `(${selectedYear})` : ''}</h2>
           </div>
 
           <div class="stats-grid">
@@ -401,28 +416,28 @@
               <div class="stat-icon blue"><span class="material-symbols-rounded">groups</span></div>
               <div class="stat-info">
                 <div class="stat-value" data-target="${students.length}">0</div>
-                <div class="stat-label">ນັກຮຽນທັງໝົດ</div>
+                <div class="stat-label">${L('dash.stat.students')}</div>
               </div>
             </div>
             <div class="stat-card gold">
               <div class="stat-icon gold"><span class="material-symbols-rounded">school</span></div>
               <div class="stat-info">
                 <div class="stat-value" data-target="${teachers.length}">0</div>
-                <div class="stat-label">ຄູອາຈານທັງໝົດ</div>
+                <div class="stat-label">${L('dash.stat.teachers')}</div>
               </div>
             </div>
             <div class="stat-card green">
               <div class="stat-icon green"><span class="material-symbols-rounded">class</span></div>
               <div class="stat-info">
                 <div class="stat-value" data-target="${classCount}">0</div>
-                <div class="stat-label">ຫ້ອງຮຽນທັງໝົດ</div>
+                <div class="stat-label">${L('dash.stat.classes')}</div>
               </div>
             </div>
             <div class="stat-card red">
               <div class="stat-icon red"><span class="material-symbols-rounded">campaign</span></div>
               <div class="stat-info">
                 <div class="stat-value" data-target="${activeAnnouncements.length}">0</div>
-                <div class="stat-label">ແຈ້ງການ</div>
+                <div class="stat-label">${L('dash.stat.ann')}</div>
               </div>
             </div>
           </div>
@@ -430,58 +445,58 @@
           <div class="announcements-section">
             <div class="card">
               <div class="card-header">
-                <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px;color:#E53935">priority_high</span>ແຈ້ງການດ່ວນ</span>
+                <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px;color:#E53935">priority_high</span>${L('dash.urgent')}</span>
                 <button class="btn btn-sm btn-danger admin-only" onclick="NT2.App._addAnnouncementModal('urgent')">
-                  <span class="material-symbols-rounded" style="font-size:15px">add</span>ເພີ່ມ
+                  <span class="material-symbols-rounded" style="font-size:15px">add</span>${L('common.add')}
                 </button>
               </div>
               <div class="card-body announcement-list">
                 ${urgent.length ? urgent.map(a => `
                   <div class="announcement-item urgent">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                      <span class="announcement-badge">ດ່ວນ</span>
+                      <span class="announcement-badge">${L('dash.badge.urgent')}</span>
                       <div class="admin-only" style="display:flex;gap:4px">
-                        <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ດ່ວນ','${(a.title||'').replace(/'/g,"\\'")}','${(a.content||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
-                        <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
+                        <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ດ່ວນ','${(a.title||'').replace(/'/g,"\\'")}','${(a.content||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
+                        <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
                       </div>
                     </div>
                     <h4 class="announcement-title">${a.title}</h4>
                     <div class="announcement-date"><span class="material-symbols-rounded" style="font-size:13px;vertical-align:middle">calendar_today</span> ${fmtDate(a.date)}</div>
                     <div class="announcement-content">${a.content}</div>
-                  </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--text-muted)">ບໍ່ມີແຈ້ງການດ່ວນ</div>'}
+                  </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--text-muted)">' + L('dash.no_urgent') + '</div>'}
               </div>
             </div>
 
             <div class="card">
               <div class="card-header">
-                <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px;color:var(--accent-primary)">campaign</span>ແຈ້ງການທົ່ວໄປ</span>
+                <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px;color:var(--accent-primary)">campaign</span>${L('dash.normal')}</span>
                 <button class="btn btn-sm btn-primary admin-only" onclick="NT2.App._addAnnouncementModal('normal')">
-                  <span class="material-symbols-rounded" style="font-size:15px">add</span>ເພີ່ມ
+                  <span class="material-symbols-rounded" style="font-size:15px">add</span>${L('common.add')}
                 </button>
               </div>
               <div class="card-body announcement-list">
                 ${normal.length ? normal.map(a => `
                   <div class="announcement-item normal">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                      <span class="announcement-badge">ທົ່ວໄປ</span>
+                      <span class="announcement-badge">${L('dash.badge.normal')}</span>
                       <div class="admin-only" style="display:flex;gap:4px">
-                        <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ທົ່ວໄປ','${(a.title||'').replace(/'/g,"\\'")}','${(a.content||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
-                        <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
+                        <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ທົ່ວໄປ','${(a.title||'').replace(/'/g,"\\'")}','${(a.content||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
+                        <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
                       </div>
                     </div>
                     <h4 class="announcement-title">${a.title}</h4>
                     <div class="announcement-date"><span class="material-symbols-rounded" style="font-size:13px;vertical-align:middle">calendar_today</span> ${fmtDate(a.date)}</div>
                     <div class="announcement-content">${a.content}</div>
-                  </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--text-muted)">ບໍ່ມີແຈ້ງການ</div>'}
+                  </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--text-muted)">' + L('dash.no_ann') + '</div>'}
               </div>
             </div>
           </div>
 
           <div class="card mt-3">
             <div class="card-header">
-              <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px">timeline</span>ການເຄື່ອນໄຫວຜ່ານມາທີ່ລ່າສຸດ</span>
+              <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px">timeline</span>${L('dash.past')}</span>
               <button class="btn btn-sm btn-primary admin-only" onclick="NT2.App._addAnnouncementModal('past')">
-                <span class="material-symbols-rounded" style="font-size:15px">add</span>ເພີ່ມ
+                <span class="material-symbols-rounded" style="font-size:15px">add</span>${L('common.add')}
               </button>
             </div>
             <div class="card-body">
@@ -493,11 +508,11 @@
                       <div style="display:flex;justify-content:space-between;align-items:center">
                         <div class="timeline-date"><span class="timeline-num">${a._num}</span> ${fmtDate(a.date)}</div>
                         ${a.rowNum ? `<div class="admin-only" style="display:flex;gap:4px">
-                          <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ທົ່ວໄປ','${(a.title||a.activity||'').replace(/'/g,"\\'")}','${(a.content||a.detail||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
-                          <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||a.activity||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
+                          <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ທົ່ວໄປ','${(a.title||a.activity||'').replace(/'/g,"\\'")}','${(a.content||a.detail||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
+                          <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||a.activity||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
                         </div>` : ''}
                       </div>
-                      <div class="timeline-title">${a.title || a.activity || 'ການເຄື່ອນໄຫວ'}</div>
+                      <div class="timeline-title">${a.title || a.activity || L('dash.activity')}</div>
                       <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:4px">${a.content || a.detail || ''}</div>
                     </div>
                   </div>`).join('')}
@@ -529,33 +544,33 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:480px">
           <div class="modal-header">
-            <h3 class="modal-title"><span class="material-symbols-rounded">campaign</span> ເພີ່ມແຈ້ງການ / ການເຄື່ອນໄຫວ</h3>
+            <h3 class="modal-title"><span class="material-symbols-rounded">campaign</span> ${L('modal.add_ann')}</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label class="form-label">ວັນທີ</label>
+              <label class="form-label">${L('modal.date')}</label>
               <input type="date" class="form-input" id="annDate" value="${todayStr}">
             </div>
             <div class="form-group">
-              <label class="form-label">ປະເພດ</label>
+              <label class="form-label">${L('modal.type')}</label>
               <select class="form-select" id="annType">
-                <option value="ດ່ວນ" ${selectedType === 'ດ່ວນ' ? 'selected' : ''}>ດ່ວນ</option>
-                <option value="ທົ່ວໄປ" ${selectedType === 'ທົ່ວໄປ' ? 'selected' : ''}>ທົ່ວໄປ</option>
+                <option value="ດ່ວນ" ${selectedType === 'ດ່ວນ' ? 'selected' : ''}>${L('dash.badge.urgent')}</option>
+                <option value="ທົ່ວໄປ" ${selectedType === 'ທົ່ວໄປ' ? 'selected' : ''}>${L('dash.badge.normal')}</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">ຫົວຂໍ້</label>
-              <input type="text" class="form-input" id="annTitle" placeholder="ໃສ່ຫົວຂໍ້ແຈ້ງການ">
+              <label class="form-label">${L('modal.title')}</label>
+              <input type="text" class="form-input" id="annTitle" placeholder="${L('modal.title_ph')}">
             </div>
             <div class="form-group">
-              <label class="form-label">ເນື້ອໃນ</label>
-              <textarea class="form-textarea" id="annContent" placeholder="ໃສ່ເນື້ອໃນແຈ້ງການ"></textarea>
+              <label class="form-label">${L('modal.content')}</label>
+              <textarea class="form-textarea" id="annContent" placeholder="${L('modal.content_ph')}"></textarea>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
-            <button class="btn btn-primary" id="saveAnnBtn">ບັນທຶກ</button>
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">${L('common.cancel')}</button>
+            <button class="btn btn-primary" id="saveAnnBtn">${L('common.save')}</button>
           </div>
         </div>`;
 
@@ -565,17 +580,17 @@
         const title   = overlay.querySelector('#annTitle').value.trim();
         const content = overlay.querySelector('#annContent').value.trim();
 
-        if (!title) { showToast('ກະລຸນາໃສ່ຫົວຂໍ້ແຈ້ງການ', 'error'); return; }
+        if (!title) { showToast(L('toast.enter_title'), 'error'); return; }
 
-        showToast('ກຳລັງບັນທຶກໃສ່ Google Sheet...', 'info');
+        showToast(L('toast.saving_sheet'), 'info');
         const selectedYear = localStorage.getItem('nt2_selected_year') || '';
         const ok = await NT2.Data.addAnnouncement(selectedYear, { date, type, title, content });
         if (ok) {
-          showToast('ເພີ່ມແຈ້ງການສຳເລັດ!', 'success');
+          showToast(L('toast.added_ann'), 'success');
           overlay.remove();
           this.loadPage('dashboard');
         } else {
-          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+          showToast(L('toast.save_error'), 'error');
         }
       };
 
@@ -589,33 +604,33 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:480px">
           <div class="modal-header">
-            <h3 class="modal-title"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂແຈ້ງການ / ການເຄື່ອນໄຫວ</h3>
+            <h3 class="modal-title"><span class="material-symbols-rounded">edit</span> ${L('modal.edit_ann')}</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label class="form-label">ວັນທີ</label>
+              <label class="form-label">${L('modal.date')}</label>
               <input type="date" class="form-input" id="editAnnDate" value="${date}">
             </div>
             <div class="form-group">
-              <label class="form-label">ປະເພດ</label>
+              <label class="form-label">${L('modal.type')}</label>
               <select class="form-select" id="editAnnType">
-                <option value="ດ່ວນ" ${typeLabel === 'ດ່ວນ' ? 'selected' : ''}>ດ່ວນ</option>
-                <option value="ທົ່ວໄປ" ${typeLabel !== 'ດ່ວນ' ? 'selected' : ''}>ທົ່ວໄປ</option>
+                <option value="ດ່ວນ" ${typeLabel === 'ດ່ວນ' ? 'selected' : ''}>${L('dash.badge.urgent')}</option>
+                <option value="ທົ່ວໄປ" ${typeLabel !== 'ດ່ວນ' ? 'selected' : ''}>${L('dash.badge.normal')}</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">ຫົວຂໍ້</label>
+              <label class="form-label">${L('modal.title')}</label>
               <input type="text" class="form-input" id="editAnnTitle" value="${title}">
             </div>
             <div class="form-group">
-              <label class="form-label">ເນື້ອໃນ</label>
+              <label class="form-label">${L('modal.content')}</label>
               <textarea class="form-textarea" id="editAnnContent">${content}</textarea>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
-            <button class="btn btn-primary" id="updateAnnBtn">ບັນທຶກການແກ້ໄຂ</button>
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">${L('common.cancel')}</button>
+            <button class="btn btn-primary" id="updateAnnBtn">${L('common.save_edit')}</button>
           </div>
         </div>`;
 
@@ -625,17 +640,17 @@
         const titleVal   = overlay.querySelector('#editAnnTitle').value.trim();
         const contentVal = overlay.querySelector('#editAnnContent').value.trim();
 
-        if (!titleVal) { showToast('ກະລຸນາໃສ່ຫົວຂໍ້ແຈ້ງການ', 'error'); return; }
+        if (!titleVal) { showToast(L('toast.enter_title'), 'error'); return; }
 
-        showToast('ກຳລັງບັນທຶກການແກ້ໄຂໃສ່ Google Sheet...', 'info');
+        showToast(L('toast.updating'), 'info');
         const selectedYear = localStorage.getItem('nt2_selected_year') || '';
         const ok = await NT2.Data.updateAnnouncement(selectedYear, { rowNum, date: dateVal, type: typeVal, title: titleVal, content: contentVal });
         if (ok) {
-          showToast('ແກ້ໄຂແຈ້ງການສຳເລັດ!', 'success');
+          showToast(L('toast.updated_ann'), 'success');
           overlay.remove();
           this.loadPage('dashboard');
         } else {
-          showToast('ບໍ່ສາມາດແກ້ໄຂໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+          showToast(L('toast.save_error'), 'error');
         }
       };
 
@@ -644,30 +659,30 @@
     },
 
     async _deleteAnnouncement(rowNum, title) {
-      if (!confirm(`ທ່ານຕ້ອງການລຶບແຈ້ງການ: "${title}" ແທ້ບໍ?`)) return;
-      showToast('ກຳລັງລຶບ...', 'info');
+      if (!confirm(`${L('confirm.delete')} "${title}" ${L('confirm.q')}`)) return;
+      showToast(L('toast.deleting'), 'info');
       const selectedYear = localStorage.getItem('nt2_selected_year') || '';
       const ok = await NT2.Data.deleteAnnouncement(selectedYear, { rowNum, title });
       if (ok) {
-        showToast('ລຶບແຈ້ງການສຳເລັດ!', 'success');
+        showToast(L('toast.deleted_ann'), 'success');
         this.loadPage('dashboard');
       } else {
-        showToast('ບໍ່ສາມາດລຶບໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+        showToast(L('toast.save_error'), 'error');
       }
     },
 
     /* ── ACADEMIC YEAR ───────────────────── */
     renderAcademicYear(container) {
       const years  = NT2.Data.getAcademicYears();
-      const active = years.find(y => y.status && y.status.includes('ດຳເນີນ'));
+      const active = years.find(y => y.status && (y.status.includes('ດຳເນີນ') || y.status.includes('In Progress')));
 
       container.innerHTML = `
         <div class="page-container fade-in">
           <div class="page-header">
-            <h2 class="page-title">ສົກຮຽນ</h2>
+            <h2 class="page-title">${L('page.academic_year')}</h2>
             <div class="page-actions">
               <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
-                <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂໃນ Google Sheet
+                <span class="material-symbols-rounded">edit_note</span>${L('common.edit')} Google Sheet
               </a>
             </div>
           </div>
@@ -679,7 +694,7 @@
                 <span class="material-symbols-rounded" style="color:#fff;font-size:26px">calendar_today</span>
               </div>
               <div>
-                <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:2px">ສົກຮຽນປະຈຸບັນ</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:2px">${L('year.current')}</div>
                 <div style="font-size:1.4rem;font-weight:700">${active.year}</div>
                 <div style="font-size:0.85rem;color:var(--text-secondary);margin-top:4px">
                   <span class="material-symbols-rounded" style="font-size:14px;vertical-align:middle">date_range</span>
@@ -688,7 +703,7 @@
               </div>
               <div style="margin-left:auto">
                 <span style="background:rgba(102,187,106,0.15);color:#43A047;padding:6px 14px;border-radius:20px;font-size:0.8rem;font-weight:600">
-                  ● ກຳລັງດຳເນີນ
+                  ● ${L('year.active')}
                 </span>
               </div>
             </div>
@@ -696,19 +711,19 @@
 
           <div class="card">
             <div class="card-header">
-              <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px">history_edu</span>ປະຫວັດສົກຮຽນທັງໝົດ</span>
+              <span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px">history_edu</span>${L('year.history')}</span>
             </div>
             <div class="table-wrapper">
               <table class="data-table">
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>ສົກຮຽນ</th>
-                    <th>ວັນເລີ່ມ</th>
-                    <th>ວັນສິ້ນສຸດ</th>
-                    <th>ສະຖານະ</th>
-                    <th>ໝາຍເຫດ</th>
-                    <th class="admin-only">ຈັດການ</th>
+                    <th>${L('header.year')}</th>
+                    <th>${L('year.start')}</th>
+                    <th>${L('year.end')}</th>
+                    <th>${L('year.status')}</th>
+                    <th>${L('year.note')}</th>
+                    <th class="admin-only">${L('common.manage')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -727,13 +742,13 @@
                       </td>
                       <td style="color:var(--text-secondary);font-size:0.85rem">${y.note || '—'}</td>
                       <td class="admin-only">
-                        <button class="edit-btn" title="ແກ້ໄຂ">
+                        <button class="edit-btn" title="${L('common.edit')}">
                           <span class="material-symbols-rounded">edit</span>
                         </button>
                       </td>
                     </tr>`).join('') : `
                     <tr><td colspan="7" class="text-center" style="padding:40px;color:var(--text-muted)">
-                      ບໍ່ມີຂໍ້ມູນສົກຮຽນ — ກະລຸນາໃສ່ຂໍ້ມູນໃນ sheet "academic_year" ໃນ Google Sheet
+                      ${L('year.empty')}
                     </td></tr>`}
                 </tbody>
               </table>
@@ -741,21 +756,21 @@
           </div>
 
           <div class="card mt-3">
-            <div class="card-header"><span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px">info</span>ຂໍ້ມູນ Google Sheet</span></div>
+            <div class="card-header"><span><span class="material-symbols-rounded" style="vertical-align:middle;margin-right:6px">info</span>${L('year.sheet_info')}</span></div>
             <div class="card-body">
               <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:12px">
-                ຂໍ້ມູນສົກຮຽນດຶງມາຈາກ Sheet Tab ຊື່ <code style="background:var(--bg-primary);padding:2px 6px;border-radius:4px;font-family:monospace">academic_year</code>
+                ${L('year.sheet_desc')} <code style="background:var(--bg-primary);padding:2px 6px;border-radius:4px;font-family:monospace">academic_year</code>
               </p>
-              <p style="font-size:0.85rem;color:var(--text-muted)">ໂຄງສ້າງ column ທີ່ຕ້ອງການ:</p>
+              <p style="font-size:0.85rem;color:var(--text-muted)">${L('year.col_required')}</p>
               <div class="table-wrapper mt-1">
                 <table class="data-table" style="font-size:0.82rem">
-                  <thead><tr><th>Column</th><th>ຄວາມໝາຍ</th><th>ຕົວຢ່າງ</th></tr></thead>
+                  <thead><tr><th>Column</th><th>${L('year.col_meaning')}</th><th>${L('year.col_example')}</th></tr></thead>
                   <tbody>
-                    <tr><td><code>ສົກຮຽນ</code></td><td>ສົກຮຽນ</td><td>2026-2027</td></tr>
-                    <tr><td><code>ເລີ່ມຕົ້ນ</code></td><td>ວັນທີເລີ່ມ</td><td>2026-06-01</td></tr>
-                    <tr><td><code>ສິ້ນສຸດ</code></td><td>ວັນທີສິ້ນສຸດ</td><td>2027-03-31</td></tr>
-                    <tr><td><code>ສະຖານະ</code></td><td>ສະຖານະ</td><td>ກຳລັງດຳເນີນ / ສິ້ນສຸດແລ້ວ</td></tr>
-                    <tr><td><code>ໝາຍເຫດ</code></td><td>ໝາຍເຫດ</td><td>(ທາງເລືອກ)</td></tr>
+                    <tr><td><code>${L('header.year')}</code></td><td>${L('header.year')}</td><td>2026-2027</td></tr>
+                    <tr><td><code>${L('year.start')}</code></td><td>${L('year.start')}</td><td>2026-06-01</td></tr>
+                    <tr><td><code>${L('year.end')}</code></td><td>${L('year.end')}</td><td>2027-03-31</td></tr>
+                    <tr><td><code>${L('year.status')}</code></td><td>${L('year.status')}</td><td>${L('year.active')} / ${L('year.end')}</td></tr>
+                    <tr><td><code>${L('year.note')}</code></td><td>${L('year.note')}</td><td>(${L('common.cancel')})</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -772,17 +787,17 @@
       container.innerHTML = `
         <div class="page-container fade-in">
           <div class="page-header">
-            <h2 class="page-title">ຂໍ້ມູນຄູອາຈານ ${selectedYear ? `(${selectedYear})` : ''}</h2>
+            <h2 class="page-title">${L('teach.title_full')} ${selectedYear ? `(${selectedYear})` : ''}</h2>
             <div class="page-actions">
               <div class="search-box">
                 <span class="material-symbols-rounded">search</span>
-                <input type="text" placeholder="ຄົ້ນຫາຊື່, ຕຳແໜ່ງ, ວິຊາ..." id="teacherSearch">
+                <input type="text" placeholder="${L('teach.search')}" id="teacherSearch">
               </div>
               <button class="btn btn-primary admin-only" onclick="NT2.App._addTeacherModal()">
-                <span class="material-symbols-rounded">person_add</span>ເພີ່ມຄູອາຈານ
+                <span class="material-symbols-rounded">person_add</span>${L('teach.add')}
               </button>
               <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
-                <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂໃນ Sheet
+                <span class="material-symbols-rounded">edit_note</span>${L('common.edit')} Sheet
               </a>
             </div>
           </div>
@@ -802,7 +817,7 @@
     },
 
     _teacherCards(list) {
-      if (!list || !list.length) return '<p style="text-align:center;color:var(--text-muted);padding:40px">ບໍ່ພົບຂໍ້ມູນຄູອາຈານ</p>';
+      if (!list || !list.length) return `<p style="text-align:center;color:var(--text-muted);padding:40px">${L('teach.empty')}</p>`;
       return list.map(t => {
         const displayName = t.nameLao || t.nameEn || '—';
         const displaySubName = (t.nameLao && t.nameEn) ? t.nameEn : '';
@@ -813,7 +828,7 @@
         return `
         <div class="person-card">
           <div class="person-avatar ${t.gender === 'F' ? 'female' : ''}" 
-               title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່" 
+               title="${L('common.see_photo')}" 
                onclick="event.stopPropagation(); NT2.App.zoomImage('${t.photoUrl||''}', '${escapedName}', '${escapedSub}')">
             ${t.photoUrl && t.photoUrl.trim().startsWith('http')
               ? `<img src="${t.photoUrl.trim()}" onerror="this.parentElement.textContent='${initialChar}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
@@ -822,12 +837,12 @@
           <div class="person-info">
             <h3 class="person-name">${displayName}</h3>
             ${displaySubName ? `<div class="person-name-en">${displaySubName}</div>` : ''}
-            ${t.position ? `<div class="person-detail" title="ຕຳແໜ່ງ"><span class="material-symbols-rounded">badge</span>${t.position}</div>` : ''}
-            ${t.subject ? `<div class="person-detail" title="ວິຊາສອນ"><span class="material-symbols-rounded">menu_book</span>${t.subject}</div>` : ''}
-            <div class="person-detail" title="ເບີໂທ"><span class="material-symbols-rounded">call</span>${t.phone || '—'}</div>
+            ${t.position ? `<div class="person-detail" title="${L('common.position')}"><span class="material-symbols-rounded">badge</span>${t.position}</div>` : ''}
+            ${t.subject ? `<div class="person-detail" title="${L('common.subject')}"><span class="material-symbols-rounded">menu_book</span>${t.subject}</div>` : ''}
+            <div class="person-detail" title="${L('common.phone')}"><span class="material-symbols-rounded">call</span>${t.phone || '—'}</div>
             <div class="person-actions admin-only">
-              <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editTeacherModal('${t.rowNum||''}','${(t.photoUrl||'').replace(/'/g,"\\'")}','${(t.nameLao||'').replace(/'/g,"\\'")}','${(t.nameEn||'').replace(/'/g,"\\'")}','${(t.position||'').replace(/'/g,"\\'")}','${(t.subject||'').replace(/'/g,"\\'")}','${(t.phone||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂ</button>
-              <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteTeacher('${t.rowNum||''}','${(t.nameLao||'').replace(/'/g,"\\'")}','${(t.nameEn||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">delete</span> ລຶບ</button>
+              <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editTeacherModal('${t.rowNum||''}','${(t.photoUrl||'').replace(/'/g,"\\'")}','${(t.nameLao||'').replace(/'/g,"\\'")}','${(t.nameEn||'').replace(/'/g,"\\'")}','${(t.position||'').replace(/'/g,"\\'")}','${(t.subject||'').replace(/'/g,"\\'")}','${(t.phone||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">edit</span> ${L('common.edit')}</button>
+              <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteTeacher('${t.rowNum||''}','${(t.nameLao||'').replace(/'/g,"\\'")}','${(t.nameEn||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">delete</span> ${L('common.delete')}</button>
             </div>
           </div>
         </div>`;
@@ -840,20 +855,20 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:500px">
           <div class="modal-header">
-            <h3 class="modal-title"><span class="material-symbols-rounded">person_add</span> ເພີ່ມຂໍ້ມູນຄູອາຈານ</h3>
+            <h3 class="modal-title"><span class="material-symbols-rounded">person_add</span> ${L('teach.add_title')}</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body">
-            <div class="form-group"><label class="form-label">ຮູບພາບ (Link URL)</label><input type="text" class="form-input" id="addTPhoto" placeholder="https://..."></div>
-            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາລາວ)</label><input type="text" class="form-input" id="addTNameLao" placeholder="ໃສ່ຊື່ພາສາລາວ"></div>
-            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາອັງກິດ)</label><input type="text" class="form-input" id="addTNameEn" placeholder="ໃສ່ຊື່ພາສາອັງກິດ"></div>
-            <div class="form-group"><label class="form-label">ຕຳແໜ່ງ</label><input type="text" class="form-input" id="addTPosition" placeholder="ໃສ່ຕຳແໜ່ງ (ເຊັ່ນ: ຄູສອນ)"></div>
-            <div class="form-group"><label class="form-label">ວິຊາສອນ</label><input type="text" class="form-input" id="addTSubject" placeholder="ໃສ່ວິຊາສອນ (ເຊັ່ນ: ຄະນິດສາດ)"></div>
-            <div class="form-group"><label class="form-label">ເບີໂທ</label><input type="text" class="form-input" id="addTPhone" placeholder="ໃສ່ເບີໂທ (ເຊັ່ນ: 020 5555 1234)"></div>
+            <div class="form-group"><label class="form-label">${L('common.photo_link')}</label><input type="text" class="form-input" id="addTPhoto" placeholder="https://..."></div>
+            <div class="form-group"><label class="form-label">${L('common.name_lao_long')}</label><input type="text" class="form-input" id="addTNameLao" placeholder="${L('common.name_lao_long')}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_en_long')}</label><input type="text" class="form-input" id="addTNameEn" placeholder="${L('common.name_en_long')}"></div>
+            <div class="form-group"><label class="form-label">${L('common.position')}</label><input type="text" class="form-input" id="addTPosition" placeholder="${L('common.position')}"></div>
+            <div class="form-group"><label class="form-label">${L('common.subject')}</label><input type="text" class="form-input" id="addTSubject" placeholder="${L('common.subject')}"></div>
+            <div class="form-group"><label class="form-label">${L('common.phone')}</label><input type="text" class="form-input" id="addTPhone" placeholder="${L('common.phone')}"></div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
-            <button class="btn btn-primary" id="saveTeacherBtn">ບັນທຶກລົງ Sheet</button>
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">${L('common.cancel')}</button>
+            <button class="btn btn-primary" id="saveTeacherBtn">${L('common.save_sheet')}</button>
           </div>
         </div>`;
 
@@ -865,17 +880,17 @@
         const subject  = overlay.querySelector('#addTSubject').value.trim();
         const phone    = overlay.querySelector('#addTPhone').value.trim();
 
-        if (!nameLao && !nameEn) { showToast('ກະລຸນາໃສ່ຊື່ຄູອາຈານ', 'error'); return; }
+        if (!nameLao && !nameEn) { showToast(L('toast.enter_teacher_name'), 'error'); return; }
 
-        showToast('ກຳລັງບັນທຶກລົງ Google Sheet...', 'info');
+        showToast(L('toast.saving'), 'info');
         const selectedYear = localStorage.getItem('nt2_selected_year') || '';
         const ok = await NT2.Data.addTeacher(selectedYear, { photoUrl, nameLao, nameEn, position, subject, phone });
         if (ok) {
-          showToast('ເພີ່ມຂໍ້ມູນຄູອາຈານສຳເລັດ!', 'success');
+          showToast(L('toast.added_teacher'), 'success');
           overlay.remove();
           this.loadPage('teachers');
         } else {
-          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+          showToast(L('toast.save_error'), 'error');
         }
       };
 
@@ -889,20 +904,20 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:500px">
           <div class="modal-header">
-            <h3 class="modal-title"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂຂໍ້ມູນຄູອາຈານ</h3>
+            <h3 class="modal-title"><span class="material-symbols-rounded">edit</span> ${L('teach.edit_title')}</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body">
-            <div class="form-group"><label class="form-label">ຮູບພາບ (Link URL)</label><input type="text" class="form-input" id="editTPhoto" value="${photoUrl}"></div>
-            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາລາວ)</label><input type="text" class="form-input" id="editTNameLao" value="${nameLao}"></div>
-            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາອັງກິດ)</label><input type="text" class="form-input" id="editTNameEn" value="${nameEn}"></div>
-            <div class="form-group"><label class="form-label">ຕຳແໜ່ງ</label><input type="text" class="form-input" id="editTPosition" value="${position}"></div>
-            <div class="form-group"><label class="form-label">ວິຊາສອນ</label><input type="text" class="form-input" id="editTSubject" value="${subject}"></div>
-            <div class="form-group"><label class="form-label">ເບີໂທ</label><input type="text" class="form-input" id="editTPhone" value="${phone}"></div>
+            <div class="form-group"><label class="form-label">${L('common.photo_link')}</label><input type="text" class="form-input" id="editTPhoto" value="${photoUrl}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_lao_long')}</label><input type="text" class="form-input" id="editTNameLao" value="${nameLao}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_en_long')}</label><input type="text" class="form-input" id="editTNameEn" value="${nameEn}"></div>
+            <div class="form-group"><label class="form-label">${L('common.position')}</label><input type="text" class="form-input" id="editTPosition" value="${position}"></div>
+            <div class="form-group"><label class="form-label">${L('common.subject')}</label><input type="text" class="form-input" id="editTSubject" value="${subject}"></div>
+            <div class="form-group"><label class="form-label">${L('common.phone')}</label><input type="text" class="form-input" id="editTPhone" value="${phone}"></div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
-            <button class="btn btn-primary" id="updateTeacherBtn">ບັນທຶກການແກ້ໄຂ</button>
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">${L('common.cancel')}</button>
+            <button class="btn btn-primary" id="updateTeacherBtn">${L('common.save_edit')}</button>
           </div>
         </div>`;
 
@@ -914,17 +929,17 @@
         const subjectVal  = overlay.querySelector('#editTSubject').value.trim();
         const phoneVal    = overlay.querySelector('#editTPhone').value.trim();
 
-        if (!nameLaoVal && !nameEnVal) { showToast('ກະລຸນາໃສ່ຊື່ຄູອາຈານ', 'error'); return; }
+        if (!nameLaoVal && !nameEnVal) { showToast(L('toast.enter_teacher_name'), 'error'); return; }
 
-        showToast('ກຳລັງບັນທຶກການແກ້ໄຂລົງ Google Sheet...', 'info');
+        showToast(L('toast.updating'), 'info');
         const selectedYear = localStorage.getItem('nt2_selected_year') || '';
         const ok = await NT2.Data.updateTeacher(selectedYear, { rowNum, photoUrl: photoVal, nameLao: nameLaoVal, nameEn: nameEnVal, position: positionVal, subject: subjectVal, phone: phoneVal });
         if (ok) {
-          showToast('ແກ້ໄຂຂໍ້ມູນຄູອາຈານສຳເລັດ!', 'success');
+          showToast(L('toast.updated_teacher'), 'success');
           overlay.remove();
           this.loadPage('teachers');
         } else {
-          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+          showToast(L('toast.save_error'), 'error');
         }
       };
 
@@ -934,15 +949,15 @@
 
     async _deleteTeacher(rowNum, nameLao, nameEn) {
       const name = nameLao || nameEn || '';
-      if (!confirm(`ທ່ານຕ້ອງການລຶບຂໍ້ມູນຄູອາຈານ: "${name}" ແທ້ບໍ?`)) return;
-      showToast('ກຳລັງລຶບຂໍ້ມູນອອກຈາກ Google Sheet...', 'info');
+      if (!confirm(`${L('confirm.delete')} "${name}" ${L('confirm.q')}`)) return;
+      showToast(L('toast.deleting_data'), 'info');
       const selectedYear = localStorage.getItem('nt2_selected_year') || '';
       const ok = await NT2.Data.deleteTeacher(selectedYear, { rowNum, nameLao, nameEn });
       if (ok) {
-        showToast('ລຶບຂໍ້ມູນຄູອາຈານສຳເລັດ!', 'success');
+        showToast(L('toast.deleted_teacher'), 'success');
         this.loadPage('teachers');
       } else {
-        showToast('ບໍ່ສາມາດລຶບໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+        showToast(L('toast.save_error'), 'error');
       }
     },
 
@@ -955,47 +970,47 @@
       container.innerHTML = `
         <div class="page-container fade-in">
           <div class="page-header">
-            <h2 class="page-title">ຂໍ້ມູນນັກຮຽນ ${selectedYear ? `(${selectedYear})` : ''}</h2>
+            <h2 class="page-title">${L('stu.title_full')} ${selectedYear ? `(${selectedYear})` : ''}</h2>
             <div class="page-actions">
               <div class="search-box">
                 <span class="material-symbols-rounded">search</span>
-                <input type="text" placeholder="ຄົ້ນຫາຊື່, ຫ້ອງ..." id="studentSearch">
+                <input type="text" placeholder="${L('stu.search')}" id="studentSearch">
               </div>
               <select class="form-select" id="classFilter" style="width:150px">
-                <option value="all">ທຸກຊັ້ນ</option>
-                <optgroup label="ອະນຸບານ">
+                <option value="all">${L('common.all_class')}</option>
+                <optgroup label="${L('score.kinder')}">
                   ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
                 </optgroup>
-                <optgroup label="ປະຖົມ">
+                <optgroup label="${L('score.primary')}">
                   ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
                 </optgroup>
-                <optgroup label="ມັດທະຍົມ">
+                <optgroup label="${L('score.secondary')}">
                   ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
                 </optgroup>
               </select>
               <button class="btn btn-primary admin-only" onclick="NT2.App._addStudentModal()">
-                <span class="material-symbols-rounded">person_add</span>ເພີ່ມນັກຮຽນ
+                <span class="material-symbols-rounded">person_add</span>${L('stu.add')}
               </button>
               <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
-                <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂໃນ Sheet
+                <span class="material-symbols-rounded">edit_note</span>${L('common.edit')} Sheet
               </a>
             </div>
           </div>
 
           <div class="card">
             <div class="card-header">
-              <span id="studentCount">ນັກຮຽນທັງໝົດ: <strong>${students.length}</strong> ຄົນ</span>
+              <span id="studentCount">${L('stu.total_label')}: <strong>${students.length}</strong> ${L('stu.total_unit')}</span>
             </div>
             <div class="table-wrapper">
               <table class="data-table">
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>ຮູບ</th>
-                    <th>ຊື່ ແລະ ນາມສະກຸນ (ລາວ)</th>
-                    <th>Name & Surname (EN)</th>
-                    <th>ຊັ້ນ/ຫ້ອງ</th>
-                    <th class="admin-only">ຈັດການ</th>
+                    <th>${L('common.photo')}</th>
+                    <th>${L('common.name_lao_th')}</th>
+                    <th>${L('common.name_en_th')}</th>
+                    <th>${L('common.class_room')}</th>
+                    <th class="admin-only">${L('common.manage')}</th>
                   </tr>
                 </thead>
                 <tbody id="studentBody">
@@ -1015,7 +1030,7 @@
           (q === '' || (s.nameLao + ' ' + (s.nameEn||'') + ' ' + (s.className||'')).toLowerCase().includes(q))
         );
         document.getElementById('studentBody').innerHTML   = this._studentRows(filtered);
-        document.getElementById('studentCount').innerHTML  = `ນັກຮຽນທັງໝົດ: <strong>${filtered.length}</strong> ຄົນ`;
+        document.getElementById('studentCount').innerHTML  = `${L('stu.total_label')}: <strong>${filtered.length}</strong> ${L('stu.total_unit')}`;
       };
 
       document.getElementById('studentSearch')?.addEventListener('input',  filterFn);
@@ -1023,19 +1038,19 @@
     },
 
     _studentRows(list) {
-      if (!list || !list.length) return '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted)">ບໍ່ພົບຂໍ້ມູນນັກຮຽນ</td></tr>';
+      if (!list || !list.length) return `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted)">${L('stu.empty')}</td></tr>`;
       return list.map((s, i) => {
         const displayName = s.nameLao || s.nameEn || '—';
         const initialChar = initials(displayName);
         const escapedName = displayName.replace(/'/g, "\\'");
-        const escapedSub  = (s.className ? 'ຫ້ອງ ' + s.className : '').replace(/'/g, "\\'");
+        const escapedSub  = (s.className ? L('common.room') + ' ' + s.className : '').replace(/'/g, "\\'");
 
         return `
         <tr>
           <td style="color:var(--text-muted)">${i + 1}</td>
           <td>
             <div class="person-avatar" style="width:36px;height:36px;font-size:0.9rem"
-                 title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່"
+                 title="${L('common.see_photo')}"
                  onclick="event.stopPropagation(); NT2.App.zoomImage('${s.photoUrl||''}', '${escapedName}', '${escapedSub}')">
               ${s.photoUrl && s.photoUrl.trim().startsWith('http')
                 ? `<img src="${s.photoUrl.trim()}" onerror="this.parentElement.textContent='${initialChar}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
@@ -1046,8 +1061,8 @@
           <td style="color:var(--text-secondary);font-size:0.82rem;font-family:'Inter'">${s.nameEn || '—'}</td>
           <td><span class="chip" style="pointer-events:none">${s.className || '—'}</span></td>
           <td class="admin-only">
-            <button class="edit-btn" title="ແກ້ໄຂ" onclick="NT2.App._editStudentModal('${s.rowNum||''}','${(s.photoUrl||'').replace(/'/g,"\\'")}','${(s.nameLao||'').replace(/'/g,"\\'")}','${(s.nameEn||'').replace(/'/g,"\\'")}','${(s.className||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂ</button>
-            <button class="delete-btn" title="ລຶບ" onclick="NT2.App._deleteStudent('${s.rowNum||''}','${(s.nameLao||'').replace(/'/g,"\\'")}','${(s.nameEn||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">delete</span> ລຶບ</button>
+            <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editStudentModal('${s.rowNum||''}','${(s.photoUrl||'').replace(/'/g,"\\'")}','${(s.nameLao||'').replace(/'/g,"\\'")}','${(s.nameEn||'').replace(/'/g,"\\'")}','${(s.className||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">edit</span> ${L('common.edit')}</button>
+            <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteStudent('${s.rowNum||''}','${(s.nameLao||'').replace(/'/g,"\\'")}','${(s.nameEn||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">delete</span> ${L('common.delete')}</button>
           </td>
         </tr>`;
       }).join('');
@@ -1060,31 +1075,31 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:500px">
           <div class="modal-header">
-            <h3 class="modal-title"><span class="material-symbols-rounded">person_add</span> ເພີ່ມຂໍ້ມູນນັກຮຽນ</h3>
+            <h3 class="modal-title"><span class="material-symbols-rounded">person_add</span> ${L('stu.add_title')}</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body">
-            <div class="form-group"><label class="form-label">ຮູບພາບ (Link URL)</label><input type="text" class="form-input" id="addSPhoto" placeholder="https://..."></div>
-            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາລາວ)</label><input type="text" class="form-input" id="addSNameLao" placeholder="ໃສ່ຊື່ພາສາລາວ"></div>
-            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາອັງກິດ)</label><input type="text" class="form-input" id="addSNameEn" placeholder="ໃສ່ຊື່ພາສາອັງກິດ"></div>
+            <div class="form-group"><label class="form-label">${L('common.photo_link')}</label><input type="text" class="form-input" id="addSPhoto" placeholder="https://..."></div>
+            <div class="form-group"><label class="form-label">${L('common.name_lao_long')}</label><input type="text" class="form-input" id="addSNameLao" placeholder="${L('common.name_lao_long')}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_en_long')}</label><input type="text" class="form-input" id="addSNameEn" placeholder="${L('common.name_en_long')}"></div>
             <div class="form-group">
-              <label class="form-label">ຊັ້ນ/ຫ້ອງ</label>
+              <label class="form-label">${L('common.class_room')}</label>
               <select class="form-select" id="addSClass">
-                <optgroup label="ອະນຸບານ">
+                <optgroup label="${L('score.kinder')}">
                   ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
                 </optgroup>
-                <optgroup label="ປະຖົມ">
+                <optgroup label="${L('score.primary')}">
                   ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
                 </optgroup>
-                <optgroup label="ມັດທະຍົມ">
+                <optgroup label="${L('score.secondary')}">
                   ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
                 </optgroup>
               </select>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
-            <button class="btn btn-primary" id="saveStudentBtn">ບັນທຶກລົງ Sheet</button>
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">${L('common.cancel')}</button>
+            <button class="btn btn-primary" id="saveStudentBtn">${L('common.save_sheet')}</button>
           </div>
         </div>`;
 
@@ -1094,17 +1109,17 @@
         const nameEn    = overlay.querySelector('#addSNameEn').value.trim();
         const className = overlay.querySelector('#addSClass').value;
 
-        if (!nameLao && !nameEn) { showToast('ກະລຸນາໃສ່ຊື່ນັກຮຽນ', 'error'); return; }
+        if (!nameLao && !nameEn) { showToast(L('toast.enter_student_name'), 'error'); return; }
 
-        showToast('ກຳລັງບັນທຶກລົງ Google Sheet...', 'info');
+        showToast(L('toast.saving'), 'info');
         const selectedYear = localStorage.getItem('nt2_selected_year') || '';
         const ok = await NT2.Data.addStudent(selectedYear, { photoUrl, nameLao, nameEn, className });
         if (ok) {
-          showToast('ເພີ່ມຂໍ້ມູນນັກຮຽນສຳເລັດ!', 'success');
+          showToast(L('toast.added_student'), 'success');
           overlay.remove();
           this.loadPage('students');
         } else {
-          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+          showToast(L('toast.save_error'), 'error');
         }
       };
 
@@ -1119,31 +1134,31 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:500px">
           <div class="modal-header">
-            <h3 class="modal-title"><span class="material-symbols-rounded">edit</span> ແກ້ໄຂຂໍ້ມູນນັກຮຽນ</h3>
+            <h3 class="modal-title"><span class="material-symbols-rounded">edit</span> ${L('stu.edit_title')}</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body">
-            <div class="form-group"><label class="form-label">ຮູບພາບ (Link URL)</label><input type="text" class="form-input" id="editSPhoto" value="${photoUrl}"></div>
-            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາລາວ)</label><input type="text" class="form-input" id="editSNameLao" value="${nameLao}"></div>
-            <div class="form-group"><label class="form-label">ຊື່ ແລະ ນາມສະກຸນ (ພາສາອັງກິດ)</label><input type="text" class="form-input" id="editSNameEn" value="${nameEn}"></div>
+            <div class="form-group"><label class="form-label">${L('common.photo_link')}</label><input type="text" class="form-input" id="editSPhoto" value="${photoUrl}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_lao_long')}</label><input type="text" class="form-input" id="editSNameLao" value="${nameLao}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_en_long')}</label><input type="text" class="form-input" id="editSNameEn" value="${nameEn}"></div>
             <div class="form-group">
-              <label class="form-label">ຊັ້ນ/ຫ້ອງ</label>
+              <label class="form-label">${L('common.class_room')}</label>
               <select class="form-select" id="editSClass">
-                <optgroup label="ອະນຸບານ">
+                <optgroup label="${L('score.kinder')}">
                   ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${c.name}" ${className === c.name ? 'selected' : ''}>${c.fullName}</option>`).join('')}
                 </optgroup>
-                <optgroup label="ປະຖົມ">
+                <optgroup label="${L('score.primary')}">
                   ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${c.name}" ${className === c.name ? 'selected' : ''}>${c.fullName}</option>`).join('')}
                 </optgroup>
-                <optgroup label="ມັດທະຍົມ">
+                <optgroup label="${L('score.secondary')}">
                   ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${c.name}" ${className === c.name ? 'selected' : ''}>${c.fullName}</option>`).join('')}
                 </optgroup>
               </select>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">ຍົກເລີກ</button>
-            <button class="btn btn-primary" id="updateStudentBtn">ບັນທຶກການແກ້ໄຂ</button>
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">${L('common.cancel')}</button>
+            <button class="btn btn-primary" id="updateStudentBtn">${L('common.save_edit')}</button>
           </div>
         </div>`;
 
@@ -1153,17 +1168,17 @@
         const nameEnVal    = overlay.querySelector('#editSNameEn').value.trim();
         const classNameVal = overlay.querySelector('#editSClass').value;
 
-        if (!nameLaoVal && !nameEnVal) { showToast('ກະລຸນາໃສ່ຊື່ນັກຮຽນ', 'error'); return; }
+        if (!nameLaoVal && !nameEnVal) { showToast(L('toast.enter_student_name'), 'error'); return; }
 
-        showToast('ກຳລັງບັນທຶກການແກ້ໄຂໃສ່ Google Sheet...', 'info');
+        showToast(L('toast.updating'), 'info');
         const selectedYear = localStorage.getItem('nt2_selected_year') || '';
         const ok = await NT2.Data.updateStudent(selectedYear, { rowNum, photoUrl: photoVal, nameLao: nameLaoVal, nameEn: nameEnVal, className: classNameVal });
         if (ok) {
-          showToast('ແກ້ໄຂຂໍ້ມູນນັກຮຽນສຳເລັດ!', 'success');
+          showToast(L('toast.updated_student'), 'success');
           overlay.remove();
           this.loadPage('students');
         } else {
-          showToast('ບໍ່ສາມາດບັນທຶກໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+          showToast(L('toast.save_error'), 'error');
         }
       };
 
@@ -1173,15 +1188,15 @@
 
     async _deleteStudent(rowNum, nameLao, nameEn) {
       const name = nameLao || nameEn || '';
-      if (!confirm(`ທ່ານຕ້ອງການລຶບຂໍ້ມູນນັກຮຽນ: "${name}" ແທ້ບໍ?`)) return;
-      showToast('ກຳລັງລຶບຂໍ້ມູນນັກຮຽນອອກຈາກ Google Sheet...', 'info');
+      if (!confirm(`${L('confirm.delete')} "${name}" ${L('confirm.q')}`)) return;
+      showToast(L('toast.deleting_data'), 'info');
       const selectedYear = localStorage.getItem('nt2_selected_year') || '';
       const ok = await NT2.Data.deleteStudent(selectedYear, { rowNum, nameLao, nameEn });
       if (ok) {
-        showToast('ລຶບຂໍ້ມູນນັກຮຽນສຳເລັດ!', 'success');
+        showToast(L('toast.deleted_student'), 'success');
         this.loadPage('students');
       } else {
-        showToast('ບໍ່ສາມາດລຶບໄດ້ — ກະລຸນາກວດສອບ Google Script', 'error');
+        showToast(L('toast.save_error'), 'error');
       }
     },
 
@@ -1192,36 +1207,36 @@
 
       const classGroups = [
         {
-          label: 'ອະນຸບານ',
+          label: L('score.kinder'),
           icon: 'child_care',
           items: [
-            { code: 'ອ1', name: 'ອະນຸບານ 1', url: links['ອ1'] || '#' },
-            { code: 'ອ2', name: 'ອະນຸບານ 2', url: links['ອ2'] || '#' },
-            { code: 'ອ3', name: 'ອະນຸບານ 3', url: links['ອ3'] || '#' }
+            { code: 'ອ1', name: `${L('score.kinder')} 1`, url: links['ອ1'] || '#' },
+            { code: 'ອ2', name: `${L('score.kinder')} 2`, url: links['ອ2'] || '#' },
+            { code: 'ອ3', name: `${L('score.kinder')} 3`, url: links['ອ3'] || '#' }
           ]
         },
         {
-          label: 'ປະຖົມສຶກສາ',
+          label: L('score.primary'),
           icon: 'menu_book',
           items: [
-            { code: 'ປ1', name: 'ປະຖົມ 1', url: links['ປ1'] || '#' },
-            { code: 'ປ2', name: 'ປະຖົມ 2', url: links['ປ2'] || '#' },
-            { code: 'ປ3', name: 'ປະຖົມ 3', url: links['ປ3'] || '#' },
-            { code: 'ປ4', name: 'ປະຖົມ 4', url: links['ປ4'] || '#' },
-            { code: 'ປ5', name: 'ປະຖົມ 5', url: links['ປ5'] || '#' }
+            { code: 'ປ1', name: `${L('score.primary')} 1`, url: links['ປ1'] || '#' },
+            { code: 'ປ2', name: `${L('score.primary')} 2`, url: links['ປ2'] || '#' },
+            { code: 'ປ3', name: `${L('score.primary')} 3`, url: links['ປ3'] || '#' },
+            { code: 'ປ4', name: `${L('score.primary')} 4`, url: links['ປ4'] || '#' },
+            { code: 'ປ5', name: `${L('score.primary')} 5`, url: links['ປ5'] || '#' }
           ]
         },
         {
-          label: 'ມັດທະຍົມສຶກສາ',
+          label: L('score.secondary'),
           icon: 'school',
           items: [
-            { code: 'ມ1', name: 'ມັດທະຍົມ 1', url: links['ມ1'] || '#' },
-            { code: 'ມ2', name: 'ມັດທະຍົມ 2', url: links['ມ2'] || '#' },
-            { code: 'ມ3', name: 'ມັດທະຍົມ 3', url: links['ມ3'] || '#' },
-            { code: 'ມ4', name: 'ມັດທະຍົມ 4', url: links['ມ4'] || '#' },
-            { code: 'ມ5', name: 'ມັດທະຍົມ 5', url: links['ມ5'] || '#' },
-            { code: 'ມ6', name: 'ມັດທະຍົມ 6', url: links['ມ6'] || '#' },
-            { code: 'ມ7', name: 'ມັດທະຍົມ 7', url: links['ມ7'] || '#' }
+            { code: 'ມ1', name: `${L('score.secondary')} 1`, url: links['ມ1'] || '#' },
+            { code: 'ມ2', name: `${L('score.secondary')} 2`, url: links['ມ2'] || '#' },
+            { code: 'ມ3', name: `${L('score.secondary')} 3`, url: links['ມ3'] || '#' },
+            { code: 'ມ4', name: `${L('score.secondary')} 4`, url: links['ມ4'] || '#' },
+            { code: 'ມ5', name: `${L('score.secondary')} 5`, url: links['ມ5'] || '#' },
+            { code: 'ມ6', name: `${L('score.secondary')} 6`, url: links['ມ6'] || '#' },
+            { code: 'ມ7', name: `${L('score.secondary')} 7`, url: links['ມ7'] || '#' }
           ]
         }
       ];
@@ -1239,7 +1254,7 @@
                 <a href="${finalUrl}" target="${hasUrl ? '_blank' : '_self'}" class="score-btn"
                    ${!hasUrl ? 'onclick="event.preventDefault();NT2.App._noLink()"' : ''}>
                   <span class="class-label">${item.name}</span>
-                  <span class="view-label">${hasUrl ? 'ເບິ່ງຄະແນນ ›' : 'ຍັງບໍ່ທັນມີລິ້ງ'}</span>
+                  <span class="view-label">${hasUrl ? L('score.view') : L('score.noLink')}</span>
                 </a>`;
             }).join('')}
           </div>
@@ -1251,17 +1266,17 @@
       container.innerHTML = `
         <div class="page-container fade-in">
           <div class="page-header">
-            <h2 class="page-title">ລະບົບຄະແນນ ${selectedYear ? `(${selectedYear})` : ''}</h2>
+            <h2 class="page-title">${L('score.title_full')} ${selectedYear ? `(${selectedYear})` : ''}</h2>
             <div class="page-actions">
               ${hasRulesUrl ? `
                 <a href="${rulesUrl.trim()}" target="_blank" class="btn btn-warning">
-                  <span class="material-symbols-rounded">rule</span>ກົດລະບຽບຕັດຄະແນນ
+                  <span class="material-symbols-rounded">rule</span>${L('score.rules')}
                 </a>` : `
                 <button class="btn btn-warning" onclick="NT2.App._showGradingRules()">
-                  <span class="material-symbols-rounded">rule</span>ກົດລະບຽບຕັດຄະແນນ
+                  <span class="material-symbols-rounded">rule</span>${L('score.rules')}
                 </button>`}
               <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
-                <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂລິ້ງ
+                <span class="material-symbols-rounded">edit_note</span>${L('score.edit_links')}
               </a>
             </div>
           </div>
@@ -1276,36 +1291,36 @@
 
       const classGroups = [
         {
-          label: 'ອະນຸບານ',
+          label: L('score.kinder'),
           icon: 'child_care',
           items: [
-            { code: 'ອ1', name: 'ອະນຸບານ 1', url: links['ອ1'] || '#' },
-            { code: 'ອ2', name: 'ອະນຸບານ 2', url: links['ອ2'] || '#' },
-            { code: 'ອ3', name: 'ອະນຸບານ 3', url: links['ອ3'] || '#' }
+            { code: 'ອ1', name: `${L('score.kinder')} 1`, url: links['ອ1'] || '#' },
+            { code: 'ອ2', name: `${L('score.kinder')} 2`, url: links['ອ2'] || '#' },
+            { code: 'ອ3', name: `${L('score.kinder')} 3`, url: links['ອ3'] || '#' }
           ]
         },
         {
-          label: 'ປະຖົມສຶກສາ',
+          label: L('score.primary'),
           icon: 'menu_book',
           items: [
-            { code: 'ປ1', name: 'ປະຖົມ 1', url: links['ປ1'] || '#' },
-            { code: 'ປ2', name: 'ປະຖົມ 2', url: links['ປ2'] || '#' },
-            { code: 'ປ3', name: 'ປະຖົມ 3', url: links['ປ3'] || '#' },
-            { code: 'ປ4', name: 'ປະຖົມ 4', url: links['ປ4'] || '#' },
-            { code: 'ປ5', name: 'ປະຖົມ 5', url: links['ປ5'] || '#' }
+            { code: 'ປ1', name: `${L('score.primary')} 1`, url: links['ປ1'] || '#' },
+            { code: 'ປ2', name: `${L('score.primary')} 2`, url: links['ປ2'] || '#' },
+            { code: 'ປ3', name: `${L('score.primary')} 3`, url: links['ປ3'] || '#' },
+            { code: 'ປ4', name: `${L('score.primary')} 4`, url: links['ປ4'] || '#' },
+            { code: 'ປ5', name: `${L('score.primary')} 5`, url: links['ປ5'] || '#' }
           ]
         },
         {
-          label: 'ມັດທະຍົມສຶກສາ',
+          label: L('score.secondary'),
           icon: 'school',
           items: [
-            { code: 'ມ1', name: 'ມັດທະຍົມ 1', url: links['ມ1'] || '#' },
-            { code: 'ມ2', name: 'ມັດທະຍົມ 2', url: links['ມ2'] || '#' },
-            { code: 'ມ3', name: 'ມັດທະຍົມ 3', url: links['ມ3'] || '#' },
-            { code: 'ມ4', name: 'ມັດທະຍົມ 4', url: links['ມ4'] || '#' },
-            { code: 'ມ5', name: 'ມັດທະຍົມ 5', url: links['ມ5'] || '#' },
-            { code: 'ມ6', name: 'ມັດທະຍົມ 6', url: links['ມ6'] || '#' },
-            { code: 'ມ7', name: 'ມັດທະຍົມ 7', url: links['ມ7'] || '#' }
+            { code: 'ມ1', name: `${L('score.secondary')} 1`, url: links['ມ1'] || '#' },
+            { code: 'ມ2', name: `${L('score.secondary')} 2`, url: links['ມ2'] || '#' },
+            { code: 'ມ3', name: `${L('score.secondary')} 3`, url: links['ມ3'] || '#' },
+            { code: 'ມ4', name: `${L('score.secondary')} 4`, url: links['ມ4'] || '#' },
+            { code: 'ມ5', name: `${L('score.secondary')} 5`, url: links['ມ5'] || '#' },
+            { code: 'ມ6', name: `${L('score.secondary')} 6`, url: links['ມ6'] || '#' },
+            { code: 'ມ7', name: `${L('score.secondary')} 7`, url: links['ມ7'] || '#' }
           ]
         }
       ];
@@ -1323,7 +1338,7 @@
                 <a href="${finalUrl}" target="${hasUrl ? '_blank' : '_self'}" class="score-btn"
                    ${!hasUrl ? 'onclick="event.preventDefault();NT2.App._noAttendanceLink()"' : ''}>
                   <span class="class-label">${item.name}</span>
-                  <span class="view-label">${hasUrl ? 'ເບິ່ງການມາຮຽນ ›' : 'ຍັງບໍ່ທັນມີລິ້ງ'}</span>
+                  <span class="view-label">${hasUrl ? L('att.view') : L('att.noLink')}</span>
                 </a>`;
             }).join('')}
           </div>
@@ -1332,10 +1347,10 @@
       container.innerHTML = `
         <div class="page-container fade-in">
           <div class="page-header">
-            <h2 class="page-title">ຕິດຕາມການມາຮຽນ ${selectedYear ? `(${selectedYear})` : ''}</h2>
+            <h2 class="page-title">${L('att.title_full')} ${selectedYear ? `(${selectedYear})` : ''}</h2>
             <div class="page-actions">
               <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
-                <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂລິ້ງ
+                <span class="material-symbols-rounded">edit_note</span>${L('att.edit_links')}
               </a>
             </div>
           </div>
@@ -1343,9 +1358,9 @@
         </div>`;
     },
 
-    _noAttendanceLink() { showToast('ຍັງບໍ່ທັນໄດ້ໃສ່ລິ້ງ — ກະລຸນາໃສ່ URL ໃນ Google Sheet (ແຖວ 3)', 'info'); },
+    _noAttendanceLink() { showToast(L('noLink.attendance'), 'info'); },
 
-    _noLink() { showToast('ຍັງບໍ່ທັນໄດ້ໃສ່ລິ້ງ — ກະລຸນາໃສ່ URL ໃນ Google Sheet tab "scores_links"', 'info'); },
+    _noLink() { showToast(L('noLink.scores'), 'info'); },
 
     _showGradingRules() {
       const overlay = document.createElement('div');
@@ -1353,7 +1368,7 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:560px">
           <div class="modal-header">
-            <h3 class="modal-title"><span class="material-symbols-rounded">rule</span> ກົດລະບຽບການຕັດຄະແນນ</h3>
+            <h3 class="modal-title"><span class="material-symbols-rounded">rule</span> ${L('rules.title')}</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body">
@@ -1361,18 +1376,18 @@
               <table style="width:100%;border-collapse:collapse">
                 <thead>
                   <tr>
-                    <th style="background:var(--accent-primary);color:#fff;padding:10px;text-align:center">ລະດັບ</th>
-                    <th style="background:var(--accent-primary);color:#fff;padding:10px;text-align:center">ຄະແນນ</th>
-                    <th style="background:var(--accent-primary);color:#fff;padding:10px;text-align:center">ໝາຍຄວາມວ່າ</th>
+                    <th style="background:var(--accent-primary);color:#fff;padding:10px;text-align:center">${L('rules.level')}</th>
+                    <th style="background:var(--accent-primary);color:#fff;padding:10px;text-align:center">${L('rules.score')}</th>
+                    <th style="background:var(--accent-primary);color:#fff;padding:10px;text-align:center">${L('rules.meaning')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${[
-                    ['ດີເລີດ',  '90-100', '🏆 ຜ່ານດີທີ່ສຸດ'],
-                    ['ດີ',      '80-89',  '✅ ຜ່ານດີ'],
-                    ['ປານກາງ', '70-79',  '✅ ຜ່ານ'],
-                    ['ອ່ອນ',    '60-69',  '⚠️ ຜ່ານ (ມີເງື່ອນໄຂ)'],
-                    ['ຕົກ',     '0-59',   '❌ ບໍ່ຜ່ານ'],
+                    [L('rules.excellent'), '90-100', '🏆 ' + L('rules.excellent_m')],
+                    [L('rules.good'),     '80-89',  '✅ ' + L('rules.good_m')],
+                    [L('rules.average'),  '70-79',  '✅ ' + L('rules.average_m')],
+                    [L('rules.weak'),     '60-69',  '⚠️ ' + L('rules.weak_m')],
+                    [L('rules.fail'),     '0-59',   '❌ ' + L('rules.fail_m')],
                   ].map(([g, s, r], i) => `
                     <tr style="background:${i%2?'var(--bg-primary)':'var(--bg-card)'}">
                       <td style="padding:10px;text-align:center;font-weight:600">${g}</td>
@@ -1383,7 +1398,7 @@
               </table>
             </div>
           </div>
-          <div class="modal-footer"><button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">ປິດ</button></div>
+          <div class="modal-footer"><button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">${L('common.close')}</button></div>
         </div>`;
       overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
       document.body.appendChild(overlay);
@@ -1406,7 +1421,7 @@
         });
 
         if (!cleanRows.length) {
-          return '<div style="text-align:center;padding:30px;color:var(--text-muted)">ບໍ່ພົບຂໍ້ມູນຕາຕະລາງ</div>';
+          return `<div style="text-align:center;padding:30px;color:var(--text-muted)">${L('sched.empty')}</div>`;
         }
         return `
         <div class="table-wrapper">
@@ -1416,7 +1431,7 @@
                 <tr class="${r.isBreak ? 'break-row' : ''}">
                   <td class="time-col">${r.time || '—'}</td>
                   ${r.isBreak
-                    ? `<td colspan="5" style="text-align:center">${r.mon || 'ພັກ'}</td>`
+                    ? `<td colspan="5" style="text-align:center">${r.mon || L('sched.break')}</td>`
                     : `<td>${r.mon || '—'}</td><td>${r.tue || '—'}</td><td>${r.wed || '—'}</td><td>${r.thu || '—'}</td><td>${r.fri || '—'}</td>`}
                 </tr>`).join('')}
             </tbody>
@@ -1427,15 +1442,15 @@
       container.innerHTML = `
         <div class="page-container fade-in">
           <div class="page-header">
-            <h2 class="page-title">ຕາຕະລາງ ${selectedYear ? `(${selectedYear})` : ''}</h2>
+            <h2 class="page-title">${L('sched.title_full')} ${selectedYear ? `(${selectedYear})` : ''}</h2>
             <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
-              <span class="material-symbols-rounded">edit_note</span>ແກ້ໄຂໃນ Sheet
+              <span class="material-symbols-rounded">edit_note</span>${L('common.edit')} Sheet
             </a>
           </div>
           <div class="tabs-container">
             <div class="tabs-header">
-              <button class="tab-btn active" data-tab="study">ຕາຕະລາງຮຽນ (ນັກຮຽນ)</button>
-              <button class="tab-btn" data-tab="teach">ຕາຕະລາງສອນ (ຄູອາຈານ)</button>
+              <button class="tab-btn active" data-tab="study">${L('sched.study')}</button>
+              <button class="tab-btn" data-tab="teach">${L('sched.teach')}</button>
             </div>
             <div class="tab-panel active" id="tab-study">${tableHTML(study)}</div>
             <div class="tab-panel"        id="tab-teach">${tableHTML(teach)}</div>
@@ -1479,7 +1494,7 @@
                     <span class="material-symbols-rounded">${icon}</span>
                   </div>
                   <div class="class-name">${c.fullName}</div>
-                  <div class="class-count">ນັກຮຽນ ${count} ຄົນ</div>
+                  <div class="class-count">${L('class.students')} ${count} ${L('class.unit')}</div>
                 </div>`;
             }).join('')}
           </div>
@@ -1488,12 +1503,12 @@
       container.innerHTML = `
         <div class="page-container fade-in">
           <div class="page-header">
-            <h2 class="page-title">ຊັ້ນຮຽນທັງໝົດ ${selectedYear ? `(${selectedYear})` : ''}</h2>
+            <h2 class="page-title">${L('class.title_full')} ${selectedYear ? `(${selectedYear})` : ''}</h2>
           </div>
           <div class="levels-container">
-            ${section('ອະນຸບານສຶກສາ', 'child_care', 'kindergarten', kindergarten)}
-            ${section('ປະຖົມສຶກສາ',   'menu_book',  'primary',      primary)}
-            ${section('ມັດທະຍົມສຶກສາ','school',     'secondary',    secondary)}
+            ${section(L('class.kinder'), 'child_care', 'kindergarten', kindergarten)}
+            ${section(L('class.primary'),   'menu_book',  'primary',      primary)}
+            ${section(L('class.secondary'),'school',     'secondary',    secondary)}
           </div>
         </div>`;
     },
@@ -1508,7 +1523,7 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:620px">
           <div class="modal-header">
-            <h3 class="modal-title"><span class="material-symbols-rounded">groups</span> ນັກຮຽນ ${fullName} ${selectedYear ? `(${selectedYear})` : ''} — (${list.length} ຄົນ)</h3>
+            <h3 class="modal-title"><span class="material-symbols-rounded">groups</span> ${L('class.modal_title')} ${fullName} ${selectedYear ? `(${selectedYear})` : ''} — (${list.length} ${L('class.unit')})</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body" style="max-height:70vh;overflow-y:auto">
@@ -1518,9 +1533,9 @@
                   <thead>
                     <tr>
                       <th>#</th>
-                      <th>ຮູບ</th>
-                      <th>ຊື່ ແລະ ນາມສະກຸນ (ລາວ)</th>
-                      <th>Name & Surname (EN)</th>
+                      <th>${L('common.photo')}</th>
+                      <th>${L('common.name_lao_th')}</th>
+                      <th>${L('common.name_en_th')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1535,7 +1550,7 @@
                         <td style="color:var(--text-muted)">${i + 1}</td>
                         <td>
                           <div class="person-avatar" style="width:32px;height:32px;font-size:0.8rem;cursor:pointer"
-                               title="ກົດເພື່ອເບິ່ງຮູບໃຫຍ່"
+                               title="${L('common.see_photo')}"
                                onclick="event.stopPropagation(); NT2.App.zoomImage('${s.photoUrl||''}', '${escapedName}', '${escapedSub}')">
                             ${s.photoUrl && s.photoUrl.trim().startsWith('http')
                               ? `<img src="${s.photoUrl.trim()}" onerror="this.parentElement.textContent='${initialChar}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
@@ -1548,9 +1563,9 @@
                     }).join('')}
                   </tbody>
                 </table>
-              </div>` : '<p style="text-align:center;padding:40px;color:var(--text-muted)">ບໍ່ມີຂໍ້ມູນນັກຮຽນໃນຫ້ອງນີ້</p>'}
+              </div>` : `<p style="text-align:center;padding:40px;color:var(--text-muted)">${L('class.empty')}</p>`}
           </div>
-          <div class="modal-footer"><button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">ປິດ</button></div>
+          <div class="modal-footer"><button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">${L('common.close')}</button></div>
         </div>`;
       overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
       document.body.appendChild(overlay);

@@ -25,8 +25,9 @@
         document.body.classList.add('admin-mode');
         this._updateLoginBtn(true);
         this._notify();
+        if (window.NT2 && NT2.Lang) NT2.Lang.applyLogin();
         if (NT2.App && NT2.App.showToast) {
-          NT2.App.showToast('ເຂົ້າສູ່ລະບົບສຳເລັດ', 'success');
+          NT2.App.showToast(NT2.Lang ? NT2.Lang.t('login.success') : 'ເຂົ້າສູ່ລະບົບສຳເລັດ', 'success');
         }
         return true;
       }
@@ -39,20 +40,23 @@
       document.body.classList.remove('admin-mode');
       this._updateLoginBtn(false);
       this._notify();
+      if (window.NT2 && NT2.Lang) NT2.Lang.applyLogin();
       if (NT2.App && NT2.App.showToast) {
-        NT2.App.showToast('ອອກຈາກລະບົບແລ້ວ', 'info');
+        NT2.App.showToast(NT2.Lang ? NT2.Lang.t('login.loggedOut') : 'ອອກຈາກລະບົບແລ້ວ', 'info');
       }
     },
 
     _updateLoginBtn(loggedIn) {
       const btn = document.getElementById('loginBtn');
       if (!btn) return;
+      const logoutLabel = (window.NT2 && NT2.Lang) ? NT2.Lang.t('login.logout') : 'ອອກຈາກລະບົບ';
+      const loginLabel  = (window.NT2 && NT2.Lang) ? NT2.Lang.t('login.login')  : 'ເຂົ້າສູ່ລະບົບ';
       if (loggedIn) {
         btn.classList.add('logged-in');
-        btn.innerHTML = '<span class="material-symbols-rounded">logout</span><span>ອອກຈາກລະບົບ</span>';
+        btn.innerHTML = `<span class="material-symbols-rounded">logout</span><span>${logoutLabel}</span>`;
       } else {
         btn.classList.remove('logged-in');
-        btn.innerHTML = '<span class="material-symbols-rounded">login</span><span>ເຂົ້າສູ່ລະບົບ</span>';
+        btn.innerHTML = `<span class="material-symbols-rounded">login</span><span>${loginLabel}</span>`;
       }
     },
 

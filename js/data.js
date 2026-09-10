@@ -3,7 +3,7 @@
 
   const SHEET_ID   = '1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc';
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwY5RcFeBzc5HKyEsmEBGby15KT58mSdtx_fZTva7CG8rXOCQtP01KaPJ-i9KDJIWDlPQ/exec';
-  const AUTO_REFRESH_MS = 3 * 60 * 1000; // 3 minutes
+  const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
   /* ─────────────────────────────────────────
      SAMPLE / FALLBACK DATA
@@ -358,25 +358,37 @@
 
     /* ── SYNC STATUS UI ──────────────────── */
     _setSyncStatus(state) {
+      this._syncState = state;
       const iconEl = document.getElementById('syncIcon');
       const timeEl = document.getElementById('lastUpdateTime');
       if (!timeEl) return;
 
       if (state === 'loading') {
         if (iconEl) { iconEl.textContent = 'sync'; iconEl.style.animation = 'spin 1s linear infinite'; }
-        timeEl.textContent = 'ກຳລັງໂຫຼດ...';
+        timeEl.textContent = (window.NT2 && NT2.Lang) ? NT2.Lang.t('sync.loading') : 'ກຳລັງໂຫຼດ...';
       } else if (state === 'live') {
         if (iconEl) { iconEl.textContent = 'cloud_done'; iconEl.style.animation = 'none'; iconEl.style.color = '#66BB6A'; }
         const t = this._lastFetch;
-        timeEl.textContent = `Google Sheet • ${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
+        timeEl.textContent = `${(window.NT2 && NT2.Lang) ? NT2.Lang.t('sync.prefix') : 'Google Sheet •'} ${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
       } else {
         if (iconEl) { iconEl.textContent = 'cloud_off'; iconEl.style.animation = 'none'; iconEl.style.color = '#FFB300'; }
-        timeEl.textContent = 'ໃຊ້ຂໍ້ມູນຕົວຢ່າງ';
+        timeEl.textContent = (window.NT2 && NT2.Lang) ? NT2.Lang.t('sync.sample') : 'ໃຊ້ຂໍ້ມູນຕົວຢ່າງ';
       }
 
-      // Also spin the header refresh button when loading
+      // Spin the header refresh button when loading (if present)
       const btn = document.getElementById('refreshBtn');
       if (btn) btn.classList.toggle('spinning', state === 'loading');
+    },
+
+    /* Re-apply sync-status text on language change without refetching */
+    refreshSyncLabel() {
+      if (this._syncState === 'live') {
+        this._setSyncStatus('live');
+      } else if (this._syncState === 'sample') {
+        this._setSyncStatus('sample');
+      } else {
+        this._setSyncStatus('loading');
+      }
     },
 
     /* ─────────────────────────────────────────
