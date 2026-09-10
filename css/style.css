@@ -489,20 +489,116 @@ body.admin-mode .admin-only { display:inline-flex !important; }
 .grid-2 { display:grid; grid-template-columns: repeat(2, 1fr); gap:20px; }
 
 /* RESPONSIVE */
+
+/* Mobile menu floating button */
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 998;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.mobile-menu-btn:active { transform: scale(0.95); }
+
+/* Tablet */
 @media (max-width: 1024px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .announcements-section { grid-template-columns: 1fr; }
+  .page-container { padding: 0; }
 }
+
+/* Mobile */
 @media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); }
+  .sidebar { transform: translateX(-100%); width: 280px; }
   .sidebar.open { transform: translateX(0); }
   .sidebar-overlay.active { display:block; }
   .main-wrapper { margin-left:0; }
+  .mobile-menu-btn { display:flex; }
   .menu-toggle { display:block; }
-  .stats-grid { grid-template-columns: 1fr; }
+  .top-header { display:none; }
+
+  .main-content { padding: 12px; padding-top: 68px; }
+
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat-card { padding: 14px; gap: 10px; }
+  .stat-icon { width: 40px; height: 40px; font-size: 20px; border-radius: 10px; }
+  .stat-value { font-size: 1.3rem; }
+  .stat-label { font-size: 0.75rem; }
+
   .data-grid { grid-template-columns: 1fr; }
-  .header-title { font-size:1rem; }
-  .main-content { padding:16px; }
+  .person-card { padding: 14px; gap: 12px; }
+  .person-avatar { width: 44px; height: 44px; font-size: 1rem; }
+  .person-name { font-size: 0.9rem; }
+  .person-detail { font-size: 0.8rem; }
+
+  .page-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .page-title { font-size: 1.2rem; }
+  .page-actions { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+
+  .search-filter-bar { flex-direction: column; gap: 8px; }
+  .search-box { min-width: 0; width: 100%; }
+
+  .tabs-header { overflow-x: auto; flex-wrap: nowrap; }
+  .tab-btn { white-space: nowrap; padding: 8px 14px; font-size: 0.85rem; }
+
+  .scores-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .score-btn { padding: 14px 10px; }
+  .score-btn .class-label { font-size: 1rem; }
+
+  .level-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+  .class-card { padding: 14px; }
+  .class-icon { width: 40px; height: 40px; font-size: 18px; border-radius: 10px; }
+  .class-name { font-size: 0.9rem; }
+
+  .modal { width: 95%; max-width: none; border-radius: 16px; }
+  .modal-body { padding: 16px; }
+  .modal-header { padding: 16px; }
+  .modal-footer { padding: 12px 16px; }
+
+  .table-wrapper { font-size: 0.85rem; }
+  .data-table th, .data-table td { padding: 8px 10px; font-size: 0.8rem; }
+  .schedule-table td, .schedule-table th { padding: 6px 4px; font-size: 0.75rem; }
+
+  .toast-container { bottom: 12px; right: 12px; left: 12px; }
+  .toast { min-width: 0; width: 100%; font-size: 0.85rem; padding: 10px 14px; }
+
+  .announcements-section { gap: 12px; }
+  .announcement-item { padding: 12px; }
+
+  .grading-rules { padding: 16px; }
+  .grading-rules table th, .grading-rules table td { padding: 6px; font-size: 0.75rem; }
+
+  .btn { padding: 8px 14px; font-size: 0.85rem; }
+  .btn-sm { padding: 5px 10px; font-size: 0.75rem; }
+
+  .sidebar-footer-actions { gap: 6px; }
+  .sidebar-footer { padding: 10px 12px; }
+  .nav-item { padding: 10px 14px; font-size: 0.85rem; }
+}
+
+/* Small phone */
+@media (max-width: 400px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .stat-card { padding: 12px; gap: 8px; }
+  .stat-icon { width: 36px; height: 36px; font-size: 18px; }
+  .stat-value { font-size: 1.1rem; }
+
+  .scores-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .level-grid { grid-template-columns: repeat(2, 1fr); }
+
+  .page-title { font-size: 1.1rem; }
+  .modal { width: 98%; }
 }
 
 /* IMAGE ZOOM LIGHTBOX */

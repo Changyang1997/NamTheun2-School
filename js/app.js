@@ -91,10 +91,12 @@
       });
 
       // Mobile menu
-      document.getElementById('menuToggle')?.addEventListener('click', () => {
+      const openSidebar = () => {
         document.getElementById('sidebar')?.classList.add('open');
         document.getElementById('sidebarOverlay')?.classList.add('active');
-      });
+      };
+      document.getElementById('menuToggle')?.addEventListener('click', openSidebar);
+      document.getElementById('mobileMenuBtn')?.addEventListener('click', openSidebar);
       document.getElementById('sidebarOverlay')?.addEventListener('click', () => this._closeSidebar());
 
       // Refresh button
