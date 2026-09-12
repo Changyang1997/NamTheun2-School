@@ -164,23 +164,32 @@
       const menu = document.getElementById('yearDropdownMenu');
       if (!menu) return;
       const years = NT2.Data.getAcademicYears();
-      const saved = localStorage.getItem('nt2_selected_year') || (years[0] ? years[0].year : '');
+      // Only ever show a year that actually exists in the loaded sheet tabs —
+      // never a stale saved value that is not part of the fetched list.
+      const saved = localStorage.getItem('nt2_selected_year');
+      const hasSavedYear = saved && years.some(y => y.year === saved);
+      const current = hasSavedYear ? saved : (years[0] ? years[0].year : '');
 
       menu.innerHTML = years.map(y => `
-        <button class="year-dropdown-item ${y.year === saved ? 'active' : ''}"
+        <button class="year-dropdown-item ${y.year === current ? 'active' : ''}"
                 data-year="${y.year}">
           ${y.year}
         </button>`).join('');
 
-      // Set label to saved selection
+      // Set label to the year from loaded sheet tabs only
       const label = document.getElementById('yearDropdownLabel');
-      if (label && saved) {
-        label.textContent = saved;
-        label.dataset.custom = '1';
+      if (label) {
+        if (current) {
+          label.textContent = current;
+          label.dataset.custom = '1';
+        } else {
+          label.textContent = (window.NT2 && NT2.Lang) ? NT2.Lang.t('header.year') : 'ສົກຮຽນ';
+          label.dataset.custom = '';
+        }
       }
 
       // Update school header info (logo, name, subtitle) for initial year
-      this.updateHeaderSchoolInfo(saved);
+      this.updateHeaderSchoolInfo(current);
 
       // Click handlers for each item
       menu.querySelectorAll('.year-dropdown-item').forEach(item => {
@@ -208,7 +217,8 @@
     async updateHeaderSchoolInfo(year) {
       if (!year) {
         const years = NT2.Data.getAcademicYears();
-        year = localStorage.getItem('nt2_selected_year') || (years[0] ? years[0].year : '');
+        const saved = localStorage.getItem('nt2_selected_year');
+        year = (saved && years.some(y => y.year === saved)) ? saved : (years[0] ? years[0].year : '');
       }
       if (!year) return;
 

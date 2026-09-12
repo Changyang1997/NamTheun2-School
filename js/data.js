@@ -6,111 +6,6 @@
   const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
   /* ─────────────────────────────────────────
-     SAMPLE / FALLBACK DATA
-  ───────────────────────────────────────── */
-  const SAMPLE = {
-    academic_years: [
-      { id:1, year:'2026-2027', startDate:'2026-06-01', endDate:'2027-03-31', status:'ກຳລັງດຳເນີນ', note:'ສົກຮຽນປະຈຸບັນ' },
-      { id:2, year:'2025-2026', startDate:'2025-06-01', endDate:'2026-03-31', status:'ສິ້ນສຸດແລ້ວ',  note:'' },
-      { id:3, year:'2024-2025', startDate:'2024-06-01', endDate:'2025-03-31', status:'ສິ້ນສຸດແລ້ວ',  note:'' }
-    ],
-    teachers: [
-      { id:1,  nameLao:'ສົມພອນ',   surnameLao:'ວິໄລສັກ',    nameEn:'Somphone',   surnameEn:'Vilaisak',      phone:'020 5555 1234', subject:'ຄະນິດສາດ',    gender:'M', photoUrl:'' },
-      { id:2,  nameLao:'ຈັນທະລາ',  surnameLao:'ພົມມະວົງ',   nameEn:'Chanthala',  surnameEn:'Phommavong',    phone:'020 5555 2345', subject:'ພາສາລາວ',      gender:'F', photoUrl:'' },
-      { id:3,  nameLao:'ບຸນມີ',    surnameLao:'ສີສະຫວາດ',   nameEn:'Bounmy',     surnameEn:'Sisavath',      phone:'020 5555 3456', subject:'ວິທະຍາສາດ',    gender:'M', photoUrl:'' },
-      { id:4,  nameLao:'ຄຳຫຼ້າ',  surnameLao:'ແສງສຸລິຍະ',  nameEn:'Khamla',     surnameEn:'Sengsouliya',   phone:'020 5555 4567', subject:'ພາສາອັງກິດ',   gender:'F', photoUrl:'' },
-      { id:5,  nameLao:'ວິໄລ',     surnameLao:'ຈັນທະວົງ',   nameEn:'Vilai',      surnameEn:'Chanthavong',   phone:'020 5555 5678', subject:'ປະຫວັດສາດ',    gender:'M', photoUrl:'' },
-      { id:6,  nameLao:'ນ້ອຍ',     surnameLao:'ພອນສະຫວັນ',  nameEn:'Noy',        surnameEn:'Phonsavanh',    phone:'020 5555 6789', subject:'ສິລະປະ',        gender:'F', photoUrl:'' },
-      { id:7,  nameLao:'ແສງຈັນ',   surnameLao:'ສຸວັນນະ',    nameEn:'Sengchan',   surnameEn:'Suvanna',       phone:'020 5555 7890', subject:'ພະລະສຶກສາ',    gender:'M', photoUrl:'' },
-      { id:8,  nameLao:'ມະນີ',     surnameLao:'ລາດຊະວົງ',   nameEn:'Mani',       surnameEn:'Latsavong',     phone:'020 5555 8901', subject:'ດົນຕີ',         gender:'F', photoUrl:'' },
-      { id:9,  nameLao:'ພູວຽງ',    surnameLao:'ຊາຍສົມບັດ',  nameEn:'Phouvieng',  surnameEn:'Xaysombath',    phone:'020 5555 9012', subject:'ເຕັກໂນໂລຊີ',  gender:'M', photoUrl:'' },
-      { id:10, nameLao:'ດາລາ',     surnameLao:'ສີບຸນເຮືອງ', nameEn:'Dara',       surnameEn:'Sibounheuang',  phone:'020 5555 0123', subject:'ພູມສາດ',        gender:'F', photoUrl:'' }
-    ],
-    students: [
-      { id:1,  nameLao:'ສຸກສະຫວັນ',  surnameLao:'ພົມມະຈັນ',    nameEn:'Souksavanh',  surnameEn:'Phommachan',    className:'ອ1', gender:'M', photoUrl:'' },
-      { id:2,  nameLao:'ວິລະພອນ',    surnameLao:'ສີສະຫວາດ',    nameEn:'Vilaphone',   surnameEn:'Sisavath',      className:'ອ2', gender:'M', photoUrl:'' },
-      { id:3,  nameLao:'ມະນີວອນ',    surnameLao:'ແກ້ວບົວພາ',   nameEn:'Manivone',    surnameEn:'Keoboupha',     className:'ອ3', gender:'F', photoUrl:'' },
-      { id:4,  nameLao:'ບົວສີ',      surnameLao:'ທຳມະວົງ',     nameEn:'Bouasy',      surnameEn:'Thammavong',    className:'ປ1', gender:'F', photoUrl:'' },
-      { id:5,  nameLao:'ພູທອນ',      surnameLao:'ຈັນທະບູລີ',   nameEn:'Phouthone',   surnameEn:'Chanthabouly',  className:'ປ2', gender:'M', photoUrl:'' },
-      { id:6,  nameLao:'ນາລີ',       surnameLao:'ວິໄລພອນ',     nameEn:'Nalee',       surnameEn:'Vilaphone',     className:'ປ3', gender:'F', photoUrl:'' },
-      { id:7,  nameLao:'ສົມຈິດ',     surnameLao:'ພັນທະວົງ',    nameEn:'Somchit',     surnameEn:'Phanthavong',   className:'ປ4', gender:'M', photoUrl:'' },
-      { id:8,  nameLao:'ແກ້ວມະນີ',   surnameLao:'ລາດຊະພົນ',    nameEn:'Keomanee',    surnameEn:'Latsaphon',     className:'ປ5', gender:'F', photoUrl:'' },
-      { id:9,  nameLao:'ຈັນສະໝອນ',   surnameLao:'ບຸນຍະວົງ',    nameEn:'Chansamone',  surnameEn:'Bounyavong',    className:'ມ1', gender:'F', photoUrl:'' },
-      { id:10, nameLao:'ສີພອນ',      surnameLao:'ໄຊຍະວົງ',     nameEn:'Siphone',     surnameEn:'Xaiyavong',     className:'ມ2', gender:'M', photoUrl:'' },
-      { id:11, nameLao:'ທິບພະສອນ',   surnameLao:'ພູມມະວົງ',    nameEn:'Thiphasone',  surnameEn:'Phoummavong',   className:'ມ3', gender:'F', photoUrl:'' },
-      { id:12, nameLao:'ອານຸພາບ',    surnameLao:'ວົງສາ',        nameEn:'Anouphab',    surnameEn:'Vongsa',        className:'ມ4', gender:'M', photoUrl:'' },
-      { id:13, nameLao:'ບຸນເລີດ',    surnameLao:'ສຸລິຍະວົງ',   nameEn:'Bounlerth',   surnameEn:'Souriyavong',   className:'ມ5', gender:'M', photoUrl:'' },
-      { id:14, nameLao:'ວັນນາ',      surnameLao:'ພິລາວົງ',      nameEn:'Vanna',       surnameEn:'Philavong',     className:'ມ6', gender:'F', photoUrl:'' },
-      { id:15, nameLao:'ສົມສະໜຸກ',   surnameLao:'ຈັນທະລັງສີ',  nameEn:'Somsanouk',   surnameEn:'Chanthalangsy', className:'ມ7', gender:'M', photoUrl:'' },
-      { id:16, nameLao:'ພອນສະຫວັນ',  surnameLao:'ໄຊຍະສິດ',     nameEn:'Phonsavanh',  surnameEn:'Xaiyasith',     className:'ອ1', gender:'M', photoUrl:'' },
-      { id:17, nameLao:'ດາວພະສອນ',   surnameLao:'ແສງອາລຸນ',    nameEn:'Daophasone',  surnameEn:'Sengaloun',     className:'ປ1', gender:'F', photoUrl:'' },
-      { id:18, nameLao:'ອຸດົມ',      surnameLao:'ບຸນຄ້ຳ',       nameEn:'Oudom',       surnameEn:'Bounkham',      className:'ມ1', gender:'M', photoUrl:'' },
-      { id:19, nameLao:'ລັດສະໝີ',    surnameLao:'ພົມມະສອນ',    nameEn:'Latsamy',     surnameEn:'Phommasone',    className:'ມ3', gender:'F', photoUrl:'' },
-      { id:20, nameLao:'ໄກສອນ',      surnameLao:'ສຸພານຸວົງ',   nameEn:'Kaisone',     surnameEn:'Souphanouvong', className:'ມ5', gender:'M', photoUrl:'' },
-      { id:21, nameLao:'ບົວລະພາ',    surnameLao:'ຈັນທະວົງສາ',  nameEn:'Boualpha',    surnameEn:'Chanthavongsa', className:'ປ3', gender:'F', photoUrl:'' },
-      { id:22, nameLao:'ສາຍສະໝອນ',   surnameLao:'ພິມມະສອນ',    nameEn:'Saysamone',   surnameEn:'Phimmasone',    className:'ມ7', gender:'F', photoUrl:'' },
-      { id:23, nameLao:'ທອງຄຳ',      surnameLao:'ວິລະວົງ',      nameEn:'Thongkham',   surnameEn:'Vilavong',      className:'ມ2', gender:'M', photoUrl:'' },
-      { id:24, nameLao:'ແກ້ວມະນີ',   surnameLao:'ບຸນສະຫວ່າງ',  nameEn:'Keomanee',    surnameEn:'Bounsavang',    className:'ປ5', gender:'F', photoUrl:'' }
-    ],
-    announcements: [
-      { id:1, title:'ປິດໂຮງຮຽນກະທັນຫັນ',       content:'ແຈ້ງປິດໂຮງຮຽນ ວັນທີ 25 ກໍລະກົດ 2026 ເນື່ອງຈາກສະພາບອາກາດ ນັກຮຽນທຸກຄົນຢູ່ເຮືອນ', type:'urgent', date:'2026-07-24' },
-      { id:2, title:'ປະຊຸມຜູ້ປົກຄອງ',            content:'ເຊີນຜູ້ປົກຄອງທຸກທ່ານ ເຂົ້າຮ່ວມປະຊຸມ ວັນທີ 28 ກໍລະກົດ ເວລາ 9:00 ໂມງ',          type:'urgent', date:'2026-07-22' },
-      { id:3, title:'ກິດຈະກຳກິລາປະຈຳປີ',        content:'ຂໍເຊີນນັກຮຽນທຸກຄົນ ເຂົ້າຮ່ວມກິດຈະກຳ ວັນທີ 01 ສິງຫາ 2026 ສະໜາມກິລາ',          type:'normal', date:'2026-07-20' },
-      { id:4, title:'ການສອບເສັງ ພາກຮຽນທີ 1',    content:'ການສອບເສັງ ພາກຮຽນທີ 1 ຈະເລີ່ມ ວັນທີ 15 ສິງຫາ 2026 ນັກຮຽນກະກຽມໂຕ',             type:'normal', date:'2026-07-18' },
-      { id:5, title:'ປ່ຽນເວລາຮຽນ',               content:'ແຈ້ງການ ປ່ຽນເວລາຮຽນ ເລີ່ມ 8:00 ໂມງ ແທນ 7:30 ໂມງ ໃນອາທິດໜ້າ',                type:'urgent', date:'2026-07-21' }
-    ],
-    studySchedule: [
-      { time:'07:30-08:20', mon:'ຄະນິດສາດ',    tue:'ພາສາລາວ',    wed:'ວິທະຍາສາດ',  thu:'ຄະນິດສາດ',    fri:'ພາສາອັງກິດ'  },
-      { time:'08:20-09:10', mon:'ພາສາລາວ',      tue:'ຄະນິດສາດ',   wed:'ພາສາອັງກິດ', thu:'ວິທະຍາສາດ',  fri:'ຄະນິດສາດ'    },
-      { time:'09:10-09:30', mon:'ພັກຜ່ອນ',      tue:'ພັກຜ່ອນ',    wed:'ພັກຜ່ອນ',    thu:'ພັກຜ່ອນ',    fri:'ພັກຜ່ອນ',    isBreak:true },
-      { time:'09:30-10:20', mon:'ວິທະຍາສາດ',   tue:'ປະຫວັດສາດ',  wed:'ຄະນິດສາດ',   thu:'ພາສາລາວ',    fri:'ສິລະປະ'       },
-      { time:'10:20-11:10', mon:'ພາສາອັງກິດ',  tue:'ພະລະສຶກສາ',  wed:'ປະຫວັດສາດ',  thu:'ເຕັກໂນໂລຊີ', fri:'ພູມສາດ'       },
-      { time:'11:10-13:30', mon:'ພັກທ່ຽງ',      tue:'ພັກທ່ຽງ',    wed:'ພັກທ່ຽງ',    thu:'ພັກທ່ຽງ',    fri:'ພັກທ່ຽງ',    isBreak:true },
-      { time:'13:30-14:20', mon:'ເຕັກໂນໂລຊີ', tue:'ວິທະຍາສາດ',  wed:'ພາສາລາວ',    thu:'ສິລະປະ',      fri:'ວິທະຍາສາດ'  },
-      { time:'14:20-15:10', mon:'ສິລະປະ',       tue:'ພາສາອັງກິດ', wed:'ດົນຕີ',       thu:'ພະລະສຶກສາ',  fri:'ພາສາລາວ'     },
-      { time:'15:10-15:30', mon:'ພັກຜ່ອນ',      tue:'ພັກຜ່ອນ',    wed:'ພັກຜ່ອນ',    thu:'ພັກຜ່ອນ',    fri:'ພັກຜ່ອນ',    isBreak:true },
-      { time:'15:30-16:20', mon:'ພູມສາດ',       tue:'ດົນຕີ',       wed:'ພະລະສຶກສາ',  thu:'ພູມສາດ',      fri:'ເຕັກໂນໂລຊີ' }
-    ],
-    teachingSchedule: [
-      { time:'07:30-08:20', mon:'ທ.ສົມພອນ (ປ3)',  tue:'ນ.ຈັນທະລາ (ມ1)', wed:'ທ.ບຸນມີ (ມ2)',    thu:'ທ.ສົມພອນ (ມ4)', fri:'ນ.ຄຳຫຼ້າ (ປ5)'  },
-      { time:'08:20-09:10', mon:'ນ.ຈັນທະລາ (ປ2)', tue:'ທ.ສົມພອນ (ມ1)', wed:'ນ.ຄຳຫຼ້າ (ມ3)',   thu:'ທ.ບຸນມີ (ປ4)',   fri:'ທ.ສົມພອນ (ມ5)'  },
-      { time:'09:10-09:30', mon:'ພັກຜ່ອນ',         tue:'ພັກຜ່ອນ',       wed:'ພັກຜ່ອນ',         thu:'ພັກຜ່ອນ',       fri:'ພັກຜ່ອນ',        isBreak:true },
-      { time:'09:30-10:20', mon:'ທ.ບຸນມີ (ມ1)',    tue:'ທ.ວິໄລ (ປ3)',   wed:'ທ.ສົມພອນ (ມ7)',  thu:'ນ.ຈັນທະລາ (ມ3)', fri:'ນ.ນ້ອຍ (ມ2)'    },
-      { time:'10:20-11:10', mon:'ນ.ຄຳຫຼ້າ (ມ2)',  tue:'ທ.ແສງຈັນ (ມ4)', wed:'ທ.ວິໄລ (ມ5)',    thu:'ທ.ພູວຽງ (ມ6)',  fri:'ນ.ດາລາ (ປ4)'    },
-      { time:'11:10-13:30', mon:'ພັກທ່ຽງ',         tue:'ພັກທ່ຽງ',       wed:'ພັກທ່ຽງ',         thu:'ພັກທ່ຽງ',       fri:'ພັກທ່ຽງ',        isBreak:true },
-      { time:'13:30-14:20', mon:'ທ.ພູວຽງ (ມ3)',   tue:'ທ.ບຸນມີ (ມ5)',  wed:'ນ.ຈັນທະລາ (ປ5)', thu:'ນ.ນ້ອຍ (ມ1)',   fri:'ທ.ບຸນມີ (ມ7)'   },
-      { time:'14:20-15:10', mon:'ນ.ນ້ອຍ (ປ4)',    tue:'ນ.ຄຳຫຼ້າ (ມ6)', wed:'ນ.ມະນີ (ມ2)',     thu:'ທ.ແສງຈັນ (ມ7)', fri:'ນ.ຈັນທະລາ (ມ4)'  },
-      { time:'15:10-15:30', mon:'ພັກຜ່ອນ',         tue:'ພັກຜ່ອນ',       wed:'ພັກຜ່ອນ',         thu:'ພັກຜ່ອນ',       fri:'ພັກຜ່ອນ',        isBreak:true },
-      { time:'15:30-16:20', mon:'ນ.ດາລາ (ມ6)',    tue:'ນ.ມະນີ (ມ5)',   wed:'ທ.ແສງຈັນ (ມ3)',  thu:'ນ.ດາລາ (ມ7)',   fri:'ທ.ພູວຽງ (ປ5)'   }
-    ],
-    scoreLinks: [
-      { className:'ອ1', displayName:'ອະນຸບານ 1',    url:'#' },
-      { className:'ອ2', displayName:'ອະນຸບານ 2',    url:'#' },
-      { className:'ອ3', displayName:'ອະນຸບານ 3',    url:'#' },
-      { className:'ປ1', displayName:'ປະຖົມ 1',       url:'#' },
-      { className:'ປ2', displayName:'ປະຖົມ 2',       url:'#' },
-      { className:'ປ3', displayName:'ປະຖົມ 3',       url:'#' },
-      { className:'ປ4', displayName:'ປະຖົມ 4',       url:'#' },
-      { className:'ປ5', displayName:'ປະຖົມ 5',       url:'#' },
-      { className:'ມ1', displayName:'ມັດທະຍົມ 1',    url:'#' },
-      { className:'ມ2', displayName:'ມັດທະຍົມ 2',    url:'#' },
-      { className:'ມ3', displayName:'ມັດທະຍົມ 3',    url:'#' },
-      { className:'ມ4', displayName:'ມັດທະຍົມ 4',    url:'#' },
-      { className:'ມ5', displayName:'ມັດທະຍົມ 5',    url:'#' },
-      { className:'ມ6', displayName:'ມັດທະຍົມ 6',    url:'#' },
-      { className:'ມ7', displayName:'ມັດທະຍົມ 7',    url:'#' }
-    ],
-    activities: [
-      { id:1, activity:'ກິດຈະກຳເປີດສົກຮຽນ ປີ 2026-2027', date:'2026-07-01', detail:'ພິທີເປີດສົກຮຽນ ມີນັກຮຽນເຂົ້າຮ່ວມ 250 ຄົນ' },
-      { id:2, activity:'ແຂ່ງຂັນກິລາ ລະຫວ່າງຫ້ອງ',        date:'2026-07-05', detail:'ແຂ່ງຂັນບານເຕະ ແລະ ບານສົ່ງ ຊັ້ນ ມ1-ມ7' },
-      { id:3, activity:'ທັດສະນະສຶກສາ ຊັ້ນ ມ5',             date:'2026-07-10', detail:'ໄປຢ້ຽມຢາມ ເຂື່ອນໄຟຟ້ານ້ຳເທີນ 2' },
-      { id:4, activity:'ສຳມະນາຄູ ປະຈຳເດືອນ',              date:'2026-07-15', detail:'ແລກປ່ຽນບົດຮຽນ ແລະ ວິທີການສອນໃໝ່' },
-      { id:5, activity:'ວັນພາສາລາວ',                        date:'2026-07-20', detail:'ຈັດກິດຈະກຳ ປະກວດຂຽນເລື່ອງ ແລະ ອ່ານບົດກະວີ' }
-    ],
-    gradingRules: ''
-  };
-
-  /* ─────────────────────────────────────────
      HELPERS
   ───────────────────────────────────────── */
   function gvizUrl(sheetName) {
@@ -223,7 +118,7 @@
      MAIN DATA OBJECT
   ───────────────────────────────────────── */
   NT2.Data = {
-    _cache:       JSON.parse(JSON.stringify(SAMPLE)), // deep-clone sample as default
+    _cache:       {}, // empty until live data loads from Google Sheets
     _usingLive:   false,
     _lastFetch:   null,
     _refreshTimer: null,
@@ -336,7 +231,7 @@
 
       this._usingLive  = anyLive;
       this._lastFetch  = new Date();
-      this._setSyncStatus(anyLive ? 'live' : 'sample');
+      this._setSyncStatus(anyLive ? 'live' : 'empty');
       if (anyLive) this._notify('refresh');
     },
 
@@ -372,7 +267,7 @@
         timeEl.textContent = `${(window.NT2 && NT2.Lang) ? NT2.Lang.t('sync.prefix') : 'Google Sheet •'} ${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
       } else {
         if (iconEl) { iconEl.textContent = 'cloud_off'; iconEl.style.animation = 'none'; iconEl.style.color = '#FFB300'; }
-        timeEl.textContent = (window.NT2 && NT2.Lang) ? NT2.Lang.t('sync.sample') : 'ໃຊ້ຂໍ້ມູນຕົວຢ່າງ';
+        timeEl.textContent = (window.NT2 && NT2.Lang) ? NT2.Lang.t('sync.empty') : 'ບໍ່ມີຂໍ້ມູນ';
       }
 
       // Spin the header refresh button when loading (if present)
@@ -384,8 +279,8 @@
     refreshSyncLabel() {
       if (this._syncState === 'live') {
         this._setSyncStatus('live');
-      } else if (this._syncState === 'sample') {
-        this._setSyncStatus('sample');
+      } else if (this._syncState === 'empty') {
+        this._setSyncStatus('empty');
       } else {
         this._setSyncStatus('loading');
       }
@@ -394,21 +289,21 @@
     /* ─────────────────────────────────────────
        PUBLIC GETTERS
     ───────────────────────────────────────── */
-    getAcademicYears()          { return this._cache.academic_years   || SAMPLE.academic_years;   },
-    getTeachers()               { return this._cache.teachers         || SAMPLE.teachers;         },
-    getStudents()               { return this._cache.students         || SAMPLE.students;         },
+    getAcademicYears()          { return Array.isArray(this._cache.academic_years) ? this._cache.academic_years : []; },
+    getTeachers()               { return Array.isArray(this._cache.teachers)       ? this._cache.teachers       : []; },
+    getStudents()               { return Array.isArray(this._cache.students)       ? this._cache.students       : []; },
     getStudentsByClass(cls)     { return this.getStudents().filter(s => s.className === cls);     },
     getStudentsByClassForYear(cls, year) {
       const list = this.getStudentsForYear(year);
       return list.filter(s => s.className === cls || (s.className && s.className.includes(cls)));
     },
-    getAnnouncements()          { return this._cache.announcements    || SAMPLE.announcements;    },
-    getStudySchedule()          { return this._cache.studySchedule    || SAMPLE.studySchedule;    },
-    getTeachingSchedule()       { return this._cache.teachingSchedule || SAMPLE.teachingSchedule; },
-    getScoreLinks()             { return this._cache.scoreLinks       || SAMPLE.scoreLinks;       },
-    getActivities()             { return this._cache.activities       || SAMPLE.activities;       },
-    getGradingRules()           { return this._cache.gradingRules     || '';                       },
-    getClassCount()             { return 15; },
+    getAnnouncements()          { return Array.isArray(this._cache.announcements)    ? this._cache.announcements    : []; },
+    getStudySchedule()          { return Array.isArray(this._cache.studySchedule)    ? this._cache.studySchedule    : []; },
+    getTeachingSchedule()       { return Array.isArray(this._cache.teachingSchedule) ? this._cache.teachingSchedule : []; },
+    getScoreLinks()             { return Array.isArray(this._cache.scoreLinks)       ? this._cache.scoreLinks       : []; },
+    getActivities()             { return Array.isArray(this._cache.activities)       ? this._cache.activities       : []; },
+    getGradingRules()           { return this._cache.gradingRules || '';                       },
+    getClassCount()             { return 0; },
     isLive()                    { return this._usingLive; },
 
     _schoolInfoCache: {},
@@ -885,7 +780,10 @@
       }
 
       if (!classCount) {
-        classCount = 15;
+        // derive from the students actually loaded for this year
+        const classes = new Set();
+        students.forEach(s => { if (s.className) classes.add(s.className); });
+        classCount = classes.size || this.getScoreLinks().length;
       }
 
       if (!announcements || announcements.length === 0) {
