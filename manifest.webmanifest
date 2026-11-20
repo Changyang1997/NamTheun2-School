@@ -1,0 +1,35 @@
+{
+  "name": "ໂຮງຮຽນ ນ້ຳເທີນ2 - ລະບົບຈັດການໂຮງຮຽນ",
+  "short_name": "ນ້ຳເທີນ2",
+  "description": "ລະບົບຈັດການໂຮງຮຽນ ນ້ຳເທີນ2 - ຂໍ້ມູນຄູ, ນັກຮຽນ, ຕາຕະລາງ, ຄະແນນ",
+  "lang": "lo",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#E2E8F0",
+  "theme_color": "#1565C0",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
