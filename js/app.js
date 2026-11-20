@@ -29,6 +29,30 @@
 
   function initials(name) { return name ? name.charAt(0) : '?'; }
 
+  /* HTML-escape text that is inserted between tags */
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /* Escape a value so it is safe inside a single-quoted inline JS handler argument
+     that itself sits inside a double-quoted HTML attribute.
+     Order matters: JS-level escaping first, then HTML-entity escaping. */
+  function jsq(v) {
+    return String(v == null ? '' : v)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/\r?\n/g, ' ')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   /* ─────────────────────────────────────────
      TOAST
   ───────────────────────────────────────── */
@@ -38,12 +62,19 @@
     const icons = { success: 'check_circle', error: 'error', info: 'info' };
     const t = document.createElement('div');
     t.className = `toast ${type}`;
-    t.innerHTML = `<span class="material-symbols-rounded">${icons[type]||'info'}</span><span>${msg}</span>`;
+    const iconEl = document.createElement('span');
+    iconEl.className = 'material-symbols-rounded';
+    iconEl.textContent = icons[type] || 'info';
+    const msgEl = document.createElement('span');
+    msgEl.textContent = String(msg == null ? '' : msg);
+    t.appendChild(iconEl);
+    t.appendChild(msgEl);
     c.appendChild(t);
     setTimeout(() => { t.style.opacity='0'; t.style.transform='translateY(10px)'; setTimeout(()=>t.remove(),300); }, 3000);
   }
 
   const L = (key) => window.NT2 && NT2.Lang ? NT2.Lang.t(key) : key;
+  const classFull = (c) => (window.NT2 && NT2.Data) ? NT2.Data.classLabel(c) : (c && c.fullName) || '';
 
   /* ─────────────────────────────────────────
      APP
@@ -170,10 +201,16 @@
       const hasSavedYear = saved && years.some(y => y.year === saved);
       const current = hasSavedYear ? saved : (years[0] ? years[0].year : '');
 
+      // Persist the effective year so every page loads the same data set
+      // (otherwise pages fetch with an empty year and render nothing on first load).
+      if (current && current !== saved) {
+        try { localStorage.setItem('nt2_selected_year', current); } catch (e) {}
+      }
+
       menu.innerHTML = years.map(y => `
         <button class="year-dropdown-item ${y.year === current ? 'active' : ''}"
-                data-year="${y.year}">
-          ${y.year}
+                data-year="${esc(y.year)}">
+          ${esc(y.year)}
         </button>`).join('');
 
       // Set label to the year from loaded sheet tabs only
@@ -236,7 +273,7 @@
       }
       if (logoContainer) {
         if (info.logo && info.logo.trim().startsWith('http')) {
-          logoContainer.innerHTML = `<img src="${info.logo.trim()}" alt="School Logo" onerror="this.outerHTML='<svg viewBox=\\'0 0 24 24\\'><path d=\\'M12 3L1 9L4 10.63V17.5C4 18.88 7.58 20 12 20C16.42 20 20 18.88 20 17.5V10.63L23 9L12 3M12 5.18L18.66 8.84L12 12.5L5.34 8.84L12 5.18Z\\'/></svg>'">`;
+          logoContainer.innerHTML = `<img src="${esc(info.logo.trim())}" alt="School Logo" onerror="this.outerHTML='<svg viewBox=\\'0 0 24 24\\'><path d=\\'M12 3L1 9L4 10.63V17.5C4 18.88 7.58 20 12 20C16.42 20 20 18.88 20 17.5V10.63L23 9L12 3M12 5.18L18.66 8.84L12 12.5L5.34 8.84L12 5.18Z\\'/></svg>'">`;
         } else {
           logoContainer.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 3L1 9L4 10.63V17.5C4 18.88 7.58 20 12 20C16.42 20 20 18.88 20 17.5V10.63L23 9L12 3M12 5.18L18.66 8.84L12 12.5L5.34 8.84L12 5.18Z"/></svg>`;
         }
@@ -306,12 +343,12 @@
         <div class="zoom-image-container">
           <button class="zoom-close-btn" title="${L('zoom.close')}"><span class="material-symbols-rounded">close</span></button>
           <div class="zoom-image-wrapper">
-            <img src="${photoUrl.trim()}" alt="${title || L('zoom.image')}" onerror="this.onerror=null;showToast('${L('zoom.load_error')}','error');this.closest('.image-zoom-overlay').remove()">
+            <img src="${esc(photoUrl.trim())}" alt="${esc(title || L('zoom.image'))}" onerror="this.onerror=null;showToast('${jsq(L('zoom.load_error'))}','error');this.closest('.image-zoom-overlay').remove()">
           </div>
           ${(title || subtitle) ? `
           <div class="zoom-info">
-            ${title ? `<div class="zoom-title">${title}</div>` : ''}
-            ${subtitle ? `<div class="zoom-subtitle">${subtitle}</div>` : ''}
+            ${title ? `<div class="zoom-title">${esc(title)}</div>` : ''}
+            ${subtitle ? `<div class="zoom-subtitle">${esc(subtitle)}</div>` : ''}
             <div class="zoom-tip">${L('zoom.tip')}</div>
           </div>` : ''}
         </div>
@@ -468,13 +505,13 @@ container.innerHTML = `
                     <div style="display:flex;justify-content:space-between;align-items:flex-start">
                       <span class="announcement-badge">${L('dash.badge.urgent')}</span>
                       <div class="admin-only" style="display:flex;gap:4px">
-                        <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ດ່ວນ','${(a.title||'').replace(/'/g,"\\'")}','${(a.content||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
-                        <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
+                        <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editAnnouncementModal('${jsq(a.rowNum)}','${jsq(a.date)}','ດ່ວນ','${jsq(a.title)}','${jsq(a.content)}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
+                        <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteAnnouncement('${jsq(a.rowNum)}','${jsq(a.title)}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
                       </div>
                     </div>
-                    <h4 class="announcement-title">${a.title}</h4>
-                    <div class="announcement-date"><span class="material-symbols-rounded" style="font-size:13px;vertical-align:middle">calendar_today</span> ${fmtDate(a.date)}</div>
-                    <div class="announcement-content">${a.content}</div>
+                    <h4 class="announcement-title">${esc(a.title)}</h4>
+                    <div class="announcement-date"><span class="material-symbols-rounded" style="font-size:13px;vertical-align:middle">calendar_today</span> ${esc(fmtDate(a.date))}</div>
+                    <div class="announcement-content">${esc(a.content)}</div>
                   </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--text-muted)">' + L('dash.no_urgent') + '</div>'}
               </div>
             </div>
@@ -492,13 +529,13 @@ container.innerHTML = `
                     <div style="display:flex;justify-content:space-between;align-items:flex-start">
                       <span class="announcement-badge">${L('dash.badge.normal')}</span>
                       <div class="admin-only" style="display:flex;gap:4px">
-                        <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ທົ່ວໄປ','${(a.title||'').replace(/'/g,"\\'")}','${(a.content||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
-                        <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
+                        <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editAnnouncementModal('${jsq(a.rowNum)}','${jsq(a.date)}','ທົ່ວໄປ','${jsq(a.title)}','${jsq(a.content)}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
+                        <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteAnnouncement('${jsq(a.rowNum)}','${jsq(a.title)}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
                       </div>
                     </div>
-                    <h4 class="announcement-title">${a.title}</h4>
-                    <div class="announcement-date"><span class="material-symbols-rounded" style="font-size:13px;vertical-align:middle">calendar_today</span> ${fmtDate(a.date)}</div>
-                    <div class="announcement-content">${a.content}</div>
+                    <h4 class="announcement-title">${esc(a.title)}</h4>
+                    <div class="announcement-date"><span class="material-symbols-rounded" style="font-size:13px;vertical-align:middle">calendar_today</span> ${esc(fmtDate(a.date))}</div>
+                    <div class="announcement-content">${esc(a.content)}</div>
                   </div>`).join('') : '<div style="text-align:center;padding:24px;color:var(--text-muted)">' + L('dash.no_ann') + '</div>'}
               </div>
             </div>
@@ -518,14 +555,14 @@ container.innerHTML = `
                     <div class="timeline-dot"></div>
                     <div class="timeline-content">
                       <div style="display:flex;justify-content:space-between;align-items:center">
-                        <div class="timeline-date"><span class="timeline-num">${a._num}</span> ${fmtDate(a.date)}</div>
+                        <div class="timeline-date"><span class="timeline-num">${a._num}</span> ${esc(fmtDate(a.date))}</div>
                         ${a.rowNum ? `<div class="admin-only" style="display:flex;gap:4px">
-                          <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editAnnouncementModal('${a.rowNum||''}','${(a.date||'')}','ທົ່ວໄປ','${(a.title||a.activity||'').replace(/'/g,"\\'")}','${(a.content||a.detail||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
-                          <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteAnnouncement('${a.rowNum||''}','${(a.title||a.activity||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
+                          <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editAnnouncementModal('${jsq(a.rowNum)}','${jsq(a.date)}','ທົ່ວໄປ','${jsq(a.title || a.activity)}','${jsq(a.content || a.detail)}')"><span class="material-symbols-rounded" style="font-size:14px">edit</span></button>
+                          <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteAnnouncement('${jsq(a.rowNum)}','${jsq(a.title || a.activity)}')"><span class="material-symbols-rounded" style="font-size:14px">delete</span></button>
                         </div>` : ''}
                       </div>
-                      <div class="timeline-title">${a.title || a.activity || L('dash.activity')}</div>
-                      <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:4px">${a.content || a.detail || ''}</div>
+                      <div class="timeline-title">${esc(a.title || a.activity || L('dash.activity'))}</div>
+                      <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:4px">${esc(a.content || a.detail)}</div>
                     </div>
                   </div>`).join('')}
               </div>
@@ -622,7 +659,7 @@ container.innerHTML = `
           <div class="modal-body">
             <div class="form-group">
               <label class="form-label">${L('modal.date')}</label>
-              <input type="date" class="form-input" id="editAnnDate" value="${date}">
+              <input type="date" class="form-input" id="editAnnDate" value="${esc(date)}">
             </div>
             <div class="form-group">
               <label class="form-label">${L('modal.type')}</label>
@@ -633,11 +670,11 @@ container.innerHTML = `
             </div>
             <div class="form-group">
               <label class="form-label">${L('modal.title')}</label>
-              <input type="text" class="form-input" id="editAnnTitle" value="${title}">
+              <input type="text" class="form-input" id="editAnnTitle" value="${esc(title)}">
             </div>
             <div class="form-group">
               <label class="form-label">${L('modal.content')}</label>
-              <textarea class="form-textarea" id="editAnnContent">${content}</textarea>
+              <textarea class="form-textarea" id="editAnnContent">${esc(content)}</textarea>
             </div>
           </div>
           <div class="modal-footer">
@@ -834,27 +871,27 @@ container.innerHTML = `
         const displayName = t.nameLao || t.nameEn || '—';
         const displaySubName = (t.nameLao && t.nameEn) ? t.nameEn : '';
         const initialChar = initials(displayName);
-        const escapedName = (displayName).replace(/'/g, "\\'");
-        const escapedSub  = (t.position || t.subject || '').replace(/'/g, "\\'");
+        const photo = (t.photoUrl || '').trim();
+        const hasPhoto = photo.startsWith('http');
 
         return `
         <div class="person-card">
           <div class="person-avatar ${t.gender === 'F' ? 'female' : ''}" 
                title="${L('common.see_photo')}" 
-               onclick="event.stopPropagation(); NT2.App.zoomImage('${t.photoUrl||''}', '${escapedName}', '${escapedSub}')">
-            ${t.photoUrl && t.photoUrl.trim().startsWith('http')
-              ? `<img src="${t.photoUrl.trim()}" onerror="this.parentElement.textContent='${initialChar}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
-              : initialChar}
+               onclick="event.stopPropagation(); NT2.App.zoomImage('${jsq(photo)}', '${jsq(displayName)}', '${jsq(t.position || t.subject || '')}')">
+            ${hasPhoto
+              ? `<img src="${esc(photo)}" onerror="this.parentElement.textContent='${jsq(initialChar)}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
+              : esc(initialChar)}
           </div>
           <div class="person-info">
-            <h3 class="person-name">${displayName}</h3>
-            ${displaySubName ? `<div class="person-name-en">${displaySubName}</div>` : ''}
-            ${t.position ? `<div class="person-detail" title="${L('common.position')}"><span class="material-symbols-rounded">badge</span>${t.position}</div>` : ''}
-            ${t.subject ? `<div class="person-detail" title="${L('common.subject')}"><span class="material-symbols-rounded">menu_book</span>${t.subject}</div>` : ''}
-            <div class="person-detail" title="${L('common.phone')}"><span class="material-symbols-rounded">call</span>${t.phone || '—'}</div>
+            <h3 class="person-name">${esc(displayName)}</h3>
+            ${displaySubName ? `<div class="person-name-en">${esc(displaySubName)}</div>` : ''}
+            ${t.position ? `<div class="person-detail" title="${L('common.position')}"><span class="material-symbols-rounded">badge</span>${esc(t.position)}</div>` : ''}
+            ${t.subject ? `<div class="person-detail" title="${L('common.subject')}"><span class="material-symbols-rounded">menu_book</span>${esc(t.subject)}</div>` : ''}
+            <div class="person-detail" title="${L('common.phone')}"><span class="material-symbols-rounded">call</span>${esc(t.phone) || '—'}</div>
             <div class="person-actions admin-only">
-              <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editTeacherModal('${t.rowNum||''}','${(t.photoUrl||'').replace(/'/g,"\\'")}','${(t.nameLao||'').replace(/'/g,"\\'")}','${(t.nameEn||'').replace(/'/g,"\\'")}','${(t.position||'').replace(/'/g,"\\'")}','${(t.subject||'').replace(/'/g,"\\'")}','${(t.phone||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">edit</span> ${L('common.edit')}</button>
-              <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteTeacher('${t.rowNum||''}','${(t.nameLao||'').replace(/'/g,"\\'")}','${(t.nameEn||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">delete</span> ${L('common.delete')}</button>
+              <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editTeacherModal('${jsq(t.rowNum)}','${jsq(photo)}','${jsq(t.nameLao)}','${jsq(t.nameEn)}','${jsq(t.position)}','${jsq(t.subject)}','${jsq(t.phone)}')"><span class="material-symbols-rounded">edit</span> ${L('common.edit')}</button>
+              <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteTeacher('${jsq(t.rowNum)}','${jsq(t.nameLao)}','${jsq(t.nameEn)}')"><span class="material-symbols-rounded">delete</span> ${L('common.delete')}</button>
             </div>
           </div>
         </div>`;
@@ -920,12 +957,12 @@ container.innerHTML = `
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body">
-            <div class="form-group"><label class="form-label">${L('common.photo_link')}</label><input type="text" class="form-input" id="editTPhoto" value="${photoUrl}"></div>
-            <div class="form-group"><label class="form-label">${L('common.name_lao_long')}</label><input type="text" class="form-input" id="editTNameLao" value="${nameLao}"></div>
-            <div class="form-group"><label class="form-label">${L('common.name_en_long')}</label><input type="text" class="form-input" id="editTNameEn" value="${nameEn}"></div>
-            <div class="form-group"><label class="form-label">${L('common.position')}</label><input type="text" class="form-input" id="editTPosition" value="${position}"></div>
-            <div class="form-group"><label class="form-label">${L('common.subject')}</label><input type="text" class="form-input" id="editTSubject" value="${subject}"></div>
-            <div class="form-group"><label class="form-label">${L('common.phone')}</label><input type="text" class="form-input" id="editTPhone" value="${phone}"></div>
+            <div class="form-group"><label class="form-label">${L('common.photo_link')}</label><input type="text" class="form-input" id="editTPhoto" value="${esc(photoUrl)}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_lao_long')}</label><input type="text" class="form-input" id="editTNameLao" value="${esc(nameLao)}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_en_long')}</label><input type="text" class="form-input" id="editTNameEn" value="${esc(nameEn)}"></div>
+            <div class="form-group"><label class="form-label">${L('common.position')}</label><input type="text" class="form-input" id="editTPosition" value="${esc(position)}"></div>
+            <div class="form-group"><label class="form-label">${L('common.subject')}</label><input type="text" class="form-input" id="editTSubject" value="${esc(subject)}"></div>
+            <div class="form-group"><label class="form-label">${L('common.phone')}</label><input type="text" class="form-input" id="editTPhone" value="${esc(phone)}"></div>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">${L('common.cancel')}</button>
@@ -991,13 +1028,13 @@ container.innerHTML = `
               <select class="form-select" id="classFilter" style="width:150px">
                 <option value="all">${L('common.all_class')}</option>
                 <optgroup label="${L('score.kinder')}">
-                  ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
+                  ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${esc(c.name)}">${esc(classFull(c))}</option>`).join('')}
                 </optgroup>
                 <optgroup label="${L('score.primary')}">
-                  ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
+                  ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${esc(c.name)}">${esc(classFull(c))}</option>`).join('')}
                 </optgroup>
                 <optgroup label="${L('score.secondary')}">
-                  ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
+                  ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${esc(c.name)}">${esc(classFull(c))}</option>`).join('')}
                 </optgroup>
               </select>
               <button class="btn btn-primary admin-only" onclick="NT2.App._addStudentModal()">
@@ -1054,8 +1091,9 @@ container.innerHTML = `
       return list.map((s, i) => {
         const displayName = s.nameLao || s.nameEn || '—';
         const initialChar = initials(displayName);
-        const escapedName = displayName.replace(/'/g, "\\'");
-        const escapedSub  = (s.className ? L('common.room') + ' ' + s.className : '').replace(/'/g, "\\'");
+        const photo = (s.photoUrl || '').trim();
+        const hasPhoto = photo.startsWith('http');
+        const subLabel = s.className ? L('common.room') + ' ' + NT2.Data.classLabelByName(s.className) : '';
 
         return `
         <tr>
@@ -1063,18 +1101,18 @@ container.innerHTML = `
           <td>
             <div class="person-avatar" style="width:36px;height:36px;font-size:0.9rem"
                  title="${L('common.see_photo')}"
-                 onclick="event.stopPropagation(); NT2.App.zoomImage('${s.photoUrl||''}', '${escapedName}', '${escapedSub}')">
-              ${s.photoUrl && s.photoUrl.trim().startsWith('http')
-                ? `<img src="${s.photoUrl.trim()}" onerror="this.parentElement.textContent='${initialChar}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
-                : initialChar}
+                 onclick="event.stopPropagation(); NT2.App.zoomImage('${jsq(photo)}', '${jsq(displayName)}', '${jsq(subLabel)}')">
+              ${hasPhoto
+                ? `<img src="${esc(photo)}" onerror="this.parentElement.textContent='${jsq(initialChar)}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
+                : esc(initialChar)}
             </div>
           </td>
-          <td style="font-weight:500">${displayName}</td>
-          <td style="color:var(--text-secondary);font-size:0.82rem;font-family:'Inter'">${s.nameEn || '—'}</td>
-          <td><span class="chip" style="pointer-events:none">${s.className || '—'}</span></td>
+          <td style="font-weight:500">${esc(displayName)}</td>
+          <td style="color:var(--text-secondary);font-size:0.82rem;font-family:'Inter'">${esc(s.nameEn) || '—'}</td>
+          <td><span class="chip" style="pointer-events:none">${esc(NT2.Data.classLabelByName(s.className)) || '—'}</span></td>
           <td class="admin-only">
-            <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editStudentModal('${s.rowNum||''}','${(s.photoUrl||'').replace(/'/g,"\\'")}','${(s.nameLao||'').replace(/'/g,"\\'")}','${(s.nameEn||'').replace(/'/g,"\\'")}','${(s.className||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">edit</span> ${L('common.edit')}</button>
-            <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteStudent('${s.rowNum||''}','${(s.nameLao||'').replace(/'/g,"\\'")}','${(s.nameEn||'').replace(/'/g,"\\'")}')"><span class="material-symbols-rounded">delete</span> ${L('common.delete')}</button>
+            <button class="edit-btn" title="${L('common.edit')}" onclick="NT2.App._editStudentModal('${jsq(s.rowNum)}','${jsq(photo)}','${jsq(s.nameLao)}','${jsq(s.nameEn)}','${jsq(s.className)}')"><span class="material-symbols-rounded">edit</span> ${L('common.edit')}</button>
+            <button class="delete-btn" title="${L('common.delete')}" onclick="NT2.App._deleteStudent('${jsq(s.rowNum)}','${jsq(s.nameLao)}','${jsq(s.nameEn)}')"><span class="material-symbols-rounded">delete</span> ${L('common.delete')}</button>
           </td>
         </tr>`;
       }).join('');
@@ -1098,13 +1136,13 @@ container.innerHTML = `
               <label class="form-label">${L('common.class_room')}</label>
               <select class="form-select" id="addSClass">
                 <optgroup label="${L('score.kinder')}">
-                  ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
+                  ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${esc(c.name)}">${esc(classFull(c))}</option>`).join('')}
                 </optgroup>
                 <optgroup label="${L('score.primary')}">
-                  ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
+                  ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${esc(c.name)}">${esc(classFull(c))}</option>`).join('')}
                 </optgroup>
                 <optgroup label="${L('score.secondary')}">
-                  ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${c.name}">${c.fullName}</option>`).join('')}
+                  ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${esc(c.name)}">${esc(classFull(c))}</option>`).join('')}
                 </optgroup>
               </select>
             </div>
@@ -1150,20 +1188,20 @@ container.innerHTML = `
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body">
-            <div class="form-group"><label class="form-label">${L('common.photo_link')}</label><input type="text" class="form-input" id="editSPhoto" value="${photoUrl}"></div>
-            <div class="form-group"><label class="form-label">${L('common.name_lao_long')}</label><input type="text" class="form-input" id="editSNameLao" value="${nameLao}"></div>
-            <div class="form-group"><label class="form-label">${L('common.name_en_long')}</label><input type="text" class="form-input" id="editSNameEn" value="${nameEn}"></div>
+            <div class="form-group"><label class="form-label">${L('common.photo_link')}</label><input type="text" class="form-input" id="editSPhoto" value="${esc(photoUrl)}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_lao_long')}</label><input type="text" class="form-input" id="editSNameLao" value="${esc(nameLao)}"></div>
+            <div class="form-group"><label class="form-label">${L('common.name_en_long')}</label><input type="text" class="form-input" id="editSNameEn" value="${esc(nameEn)}"></div>
             <div class="form-group">
               <label class="form-label">${L('common.class_room')}</label>
               <select class="form-select" id="editSClass">
                 <optgroup label="${L('score.kinder')}">
-                  ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${c.name}" ${className === c.name ? 'selected' : ''}>${c.fullName}</option>`).join('')}
+                  ${classes.filter(c=>c.level==='kindergarten').map(c=>`<option value="${esc(c.name)}" ${className === c.name ? 'selected' : ''}>${esc(classFull(c))}</option>`).join('')}
                 </optgroup>
                 <optgroup label="${L('score.primary')}">
-                  ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${c.name}" ${className === c.name ? 'selected' : ''}>${c.fullName}</option>`).join('')}
+                  ${classes.filter(c=>c.level==='primary').map(c=>`<option value="${esc(c.name)}" ${className === c.name ? 'selected' : ''}>${esc(classFull(c))}</option>`).join('')}
                 </optgroup>
                 <optgroup label="${L('score.secondary')}">
-                  ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${c.name}" ${className === c.name ? 'selected' : ''}>${c.fullName}</option>`).join('')}
+                  ${classes.filter(c=>c.level==='secondary').map(c=>`<option value="${esc(c.name)}" ${className === c.name ? 'selected' : ''}>${esc(classFull(c))}</option>`).join('')}
                 </optgroup>
               </select>
             </div>
@@ -1263,9 +1301,9 @@ container.innerHTML = `
               const hasUrl = item.url && item.url !== '#' && item.url.trim().startsWith('http');
               const finalUrl = hasUrl ? item.url.trim() : '#';
               return `
-                <a href="${finalUrl}" target="${hasUrl ? '_blank' : '_self'}" class="score-btn"
+                <a href="${esc(finalUrl)}" target="${hasUrl ? '_blank' : '_self'}" class="score-btn"
                    ${!hasUrl ? 'onclick="event.preventDefault();NT2.App._noLink()"' : ''}>
-                  <span class="class-label">${item.name}</span>
+                  <span class="class-label">${esc(item.name)}</span>
                   <span class="view-label">${hasUrl ? L('score.view') : L('score.noLink')}</span>
                 </a>`;
             }).join('')}
@@ -1275,17 +1313,28 @@ container.innerHTML = `
       const rulesUrl = links['rules'] || '#';
       const hasRulesUrl = rulesUrl && rulesUrl !== '#' && rulesUrl.trim().startsWith('http');
 
+      // ລິ້ງ "ຄະແນນອື່ນໆ" ມາຈາກ cell Y2 ຂອງ Sheet ສົກຮຽນນັ້ນໆ
+      const otherUrl = links['other'] || '#';
+      const hasOtherUrl = otherUrl && otherUrl !== '#' && otherUrl.trim().startsWith('http');
+
       container.innerHTML = `
         <div class="page-container fade-in">
           <div class="page-header">
             <h2 class="page-title">${L('score.title_full')} ${selectedYear ? `(${selectedYear})` : ''}</h2>
             <div class="page-actions">
               ${hasRulesUrl ? `
-                <a href="${rulesUrl.trim()}" target="_blank" class="btn btn-warning">
+                <a href="${esc(rulesUrl.trim())}" target="_blank" class="btn btn-warning">
                   <span class="material-symbols-rounded">rule</span>${L('score.rules')}
                 </a>` : `
                 <button class="btn btn-warning" onclick="NT2.App._showGradingRules()">
                   <span class="material-symbols-rounded">rule</span>${L('score.rules')}
+                </button>`}
+              ${hasOtherUrl ? `
+                <a href="${esc(otherUrl.trim())}" target="_blank" class="btn btn-primary">
+                  <span class="material-symbols-rounded">more_horiz</span>${L('score.other')}
+                </a>` : `
+                <button class="btn btn-primary" onclick="NT2.App._noLink()">
+                  <span class="material-symbols-rounded">more_horiz</span>${L('score.other')}
                 </button>`}
               <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
                 <span class="material-symbols-rounded">edit_note</span>${L('score.edit_links')}
@@ -1347,9 +1396,9 @@ container.innerHTML = `
               const hasUrl = item.url && item.url !== '#' && item.url.trim().startsWith('http');
               const finalUrl = hasUrl ? item.url.trim() : '#';
               return `
-                <a href="${finalUrl}" target="${hasUrl ? '_blank' : '_self'}" class="score-btn"
+                <a href="${esc(finalUrl)}" target="${hasUrl ? '_blank' : '_self'}" class="score-btn"
                    ${!hasUrl ? 'onclick="event.preventDefault();NT2.App._noAttendanceLink()"' : ''}>
-                  <span class="class-label">${item.name}</span>
+                  <span class="class-label">${esc(item.name)}</span>
                   <span class="view-label">${hasUrl ? L('att.view') : L('att.noLink')}</span>
                 </a>`;
             }).join('')}
@@ -1419,53 +1468,161 @@ container.innerHTML = `
     /* ── SCHEDULE ────────────────────────── */
     async renderSchedule(container) {
       const selectedYear = localStorage.getItem('nt2_selected_year') || '';
-      const sched = await NT2.Data.fetchScheduleForYear(selectedYear);
-      const study = sched.studySchedule || [];
-      const teach = sched.teachingSchedule || [];
+      const [sched, grid] = await Promise.all([
+        NT2.Data.fetchScheduleForYear(selectedYear),
+        NT2.Data.fetchScheduleGridForYear(selectedYear)
+      ]);
+      this._schedState = { year: selectedYear, grid: grid, parsed: sched, editMode: false };
+      this._renderScheduleBody(container);
+    },
 
-      const tableHTML = rows => {
-        const cleanRows = (rows || []).filter(r => {
-          if (!r) return false;
-          const time = (r.time || '').trim();
-          const mon  = (r.mon  || '').trim();
-          if (time === 'ເວລາ' || mon === 'ວັນຈັນ') return false;
-          return true;
+    /* Rebuild stacked tables from a raw Sheet grid. Every cell keeps the absolute
+       row/column of its Sheet cell, so admin edits are written back to the exact
+       same place (X:AC for study, AE:AJ for teaching, starting at row 4). */
+    _schedTablesFromGrid(part, kind) {
+      const tables = [];
+      if (!part || !Array.isArray(part.values)) return tables;
+      const startRow = Number(part.startRow) || 4;
+      let cur = null;
+      let pendingTitle = null;
+
+      part.values.forEach((row, ri) => {
+        const cells = [0, 1, 2, 3, 4, 5].map(ci => {
+          const raw = row && row[ci] != null ? row[ci] : '';
+          return { value: String(raw).trim(), row: startRow + ri, col: ci, kind: kind };
         });
-
-        if (!cleanRows.length) {
-          return `<div style="text-align:center;padding:30px;color:var(--text-muted)">${L('sched.empty')}</div>`;
+        if (cells.every(c => c.value === '')) return;                  // blank sheet row
+        if (cells.slice(1).every(c => c.value === '')) {               // table title row
+          pendingTitle = cells[0];
+          cur = null;
+          return;
         }
-        return `
-        <div class="table-wrapper">
-          <table class="schedule-table">
-            <tbody>
-              ${cleanRows.map(r => `
-                <tr class="${r.isBreak ? 'break-row' : ''}">
-                  <td class="time-col">${r.time || '—'}</td>
-                  ${r.isBreak
-                    ? `<td colspan="5" style="text-align:center">${r.mon || L('sched.break')}</td>`
-                    : `<td>${r.mon || '—'}</td><td>${r.tue || '—'}</td><td>${r.wed || '—'}</td><td>${r.thu || '—'}</td><td>${r.fri || '—'}</td>`}
-                </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>`;
+        if (!cur) { cur = { title: pendingTitle, rows: [] }; tables.push(cur); pendingTitle = null; }
+        cur.rows.push(cells);
+      });
+
+      return tables.filter(t => t.rows.some(r => r.some(c => c.value !== '')));
+    },
+
+    /* Fallback when raw grid data is unavailable (keeps old parsed shape working). */
+    _schedTablesFromParsed(s) {
+      const tables = [];
+      const asCell = v => ({ value: String(v == null ? '' : v).trim() });
+
+      if (Array.isArray(s) || (s && s.layout === 'time')) {
+        const rows = Array.isArray(s) ? s : (s.rows || []);
+        let cur = null;
+        (rows || []).forEach(r => {
+          if (!r) return;
+          const cells = [r.time, r.mon, r.tue, r.wed, r.thu, r.fri].map(asCell);
+          if (cells.every(c => c.value === '')) return;
+          if (cells.slice(1).every(c => c.value === '')) {
+            cur = { title: cells[0], rows: [] };
+            tables.push(cur);
+            return;
+          }
+          if (!cur) { cur = { title: null, rows: [] }; tables.push(cur); }
+          cur.rows.push(cells);
+        });
+      } else if (s && Array.isArray(s.blocks)) {
+        s.blocks.forEach(b => {
+          if (!b) return;
+          const rows = [];
+          if (Array.isArray(b.periods) && b.periods.length) {
+            rows.push([asCell(b.periodLabel), ...b.periods.map(asCell)]);
+          }
+          (b.days || []).forEach(d => rows.push([asCell(d.label), ...(d.cells || []).map(asCell)]));
+          tables.push({ title: asCell(b.title), rows: rows });
+        });
+      }
+      return tables.filter(t => t.rows.some(r => r.some(c => c.value !== '')));
+    },
+
+    _renderScheduleBody(container) {
+      const st = this._schedState || {};
+      const year = st.year || '';
+      const edit = !!st.editMode;
+      const grid = st.grid;
+      const parsed = st.parsed || {};
+      const studyTables = grid ? this._schedTablesFromGrid(grid.study, 'study')
+                               : this._schedTablesFromParsed(parsed.studySchedule);
+      const teachTables = grid ? this._schedTablesFromGrid(grid.teach, 'teach')
+                               : this._schedTablesFromParsed(parsed.teachingSchedule);
+
+      const emptyHTML = `<div style="text-align:center;padding:30px;color:var(--text-muted)">${L('sched.empty')}</div>`;
+
+      const titleHTML = t => {
+        if (!t || !t.title || !t.title.value) return '';
+        if (edit && t.title.row != null) {
+          return `
+            <div class="sched-block-title">
+              <span class="material-symbols-rounded">class</span>
+              <textarea class="sched-input sched-title-input" rows="1" spellcheck="false"
+                data-kind="${esc(t.title.kind)}" data-row="${t.title.row}" data-col="${t.title.col}"
+                data-orig="${esc(t.title.value)}">${esc(t.title.value)}</textarea>
+            </div>`;
+        }
+        return `<div class="sched-block-title"><span class="material-symbols-rounded">class</span>${esc(t.title.value)}</div>`;
       };
+
+      const tableHTML = tables => {
+        if (!tables.length) return emptyHTML;
+        return tables.map(t => `
+          <div class="sched-block">
+            ${titleHTML(t)}
+            <div class="table-wrapper">
+              <table class="schedule-table${edit ? ' sched-editing' : ''}">
+                <tbody>
+                  ${t.rows.map((cells, ri) => {
+                    const isHead = ri === 0 && /ເວລາ|Period\s*\d|Day\s*\//i.test(cells.map(c => c.value).join(' '));
+                    return `
+                    <tr${isHead ? ' class="sched-head-row"' : ''}>
+                      ${cells.map((c, ci) => {
+                        if (edit && c.row != null) {
+                          return `<td class="${ci === 0 ? 'time-col' : ''}">
+                            <textarea class="sched-input" rows="1" spellcheck="false"
+                              data-kind="${esc(c.kind)}" data-row="${c.row}" data-col="${c.col}"
+                              data-orig="${esc(c.value)}">${esc(c.value)}</textarea>
+                          </td>`;
+                        }
+                        return `<td${ci === 0 ? ' class="time-col"' : ''}>${c.value ? esc(c.value).replace(/\r?\n/g, '<br>') : ''}</td>`;
+                      }).join('')}
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>`).join('');
+      };
+
+      const actionsHTML = edit
+        ? `<button class="btn btn-success btn-sm" id="schedSaveBtn">
+             <span class="material-symbols-rounded">save</span>${L('common.save')}
+           </button>
+           <button class="btn btn-secondary btn-sm" id="schedCancelBtn">
+             <span class="material-symbols-rounded">close</span>${L('common.cancel')}
+           </button>`
+        : `${grid ? `<button class="btn btn-primary admin-only" id="schedEditBtn">
+             <span class="material-symbols-rounded">edit</span>${L('sched.edit')}
+           </button>` : ''}
+           <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
+             <span class="material-symbols-rounded">edit_note</span>${L('common.edit')} Sheet
+           </a>`;
 
       container.innerHTML = `
         <div class="page-container fade-in">
           <div class="page-header">
-            <h2 class="page-title">${L('sched.title_full')} ${selectedYear ? `(${selectedYear})` : ''}</h2>
-            <a href="https://docs.google.com/spreadsheets/d/1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc/edit" target="_blank" class="btn btn-secondary admin-only">
-              <span class="material-symbols-rounded">edit_note</span>${L('common.edit')} Sheet
-            </a>
+            <h2 class="page-title">${L('sched.title_full')} ${year ? `(${esc(year)})` : ''}</h2>
+            <div class="sched-actions">${actionsHTML}</div>
           </div>
+          ${edit ? `<div class="sched-edit-hint"><span class="material-symbols-rounded">info</span>${L('sched.edit_hint')}</div>` : ''}
           <div class="tabs-container">
             <div class="tabs-header">
               <button class="tab-btn active" data-tab="study">${L('sched.study')}</button>
               <button class="tab-btn" data-tab="teach">${L('sched.teach')}</button>
             </div>
-            <div class="tab-panel active" id="tab-study">${tableHTML(study)}</div>
-            <div class="tab-panel"        id="tab-teach">${tableHTML(teach)}</div>
+            <div class="tab-panel active" id="tab-study">${tableHTML(studyTables)}</div>
+            <div class="tab-panel"        id="tab-teach">${tableHTML(teachTables)}</div>
           </div>
         </div>`;
 
@@ -1476,6 +1633,54 @@ container.innerHTML = `
           btn.classList.add('active');
           document.getElementById(`tab-${btn.dataset.tab}`)?.classList.add('active');
         });
+      });
+
+      container.querySelector('#schedEditBtn')?.addEventListener('click', () => {
+        if (!(window.NT2 && NT2.Auth && NT2.Auth.isLoggedIn)) return;
+        if (!this._schedState || !this._schedState.grid) return;
+        this._schedState.editMode = true;
+        this._renderScheduleBody(container);
+      });
+
+      container.querySelector('#schedCancelBtn')?.addEventListener('click', () => {
+        this._schedState.editMode = false;
+        this._renderScheduleBody(container);
+      });
+
+      container.querySelector('#schedSaveBtn')?.addEventListener('click', async (ev) => {
+        const btn = ev.currentTarget;
+        const edits = [];
+        container.querySelectorAll('.sched-input').forEach(el => {
+          const value = el.value;
+          if (value !== (el.dataset.orig || '')) {
+            edits.push({
+              kind: el.dataset.kind,
+              row: Number(el.dataset.row),
+              col: Number(el.dataset.col),
+              value: value
+            });
+          }
+        });
+
+        if (!edits.length) { showToast(L('sched.no_changes'), 'info'); return; }
+
+        btn.disabled = true;
+        showToast(L('toast.saving'), 'info');
+        const ok = await NT2.Data.saveScheduleCells(this._schedState.year, edits);
+        btn.disabled = false;
+        if (!ok) { showToast(L('toast.save_error'), 'error'); return; }
+
+        // Reflect the saved values immediately, then leave edit mode.
+        const g = this._schedState.grid;
+        edits.forEach(e => {
+          const part = e.kind === 'teach' ? (g && g.teach) : (g && g.study);
+          if (!part) return;
+          const ri = e.row - (Number(part.startRow) || 4);
+          if (ri >= 0 && part.values[ri]) part.values[ri][e.col] = e.value;
+        });
+        this._schedState.editMode = false;
+        this._renderScheduleBody(container);
+        showToast(L('toast.sched_saved'), 'success');
       });
     },
 
@@ -1500,13 +1705,14 @@ container.innerHTML = `
           <div class="level-grid">
             ${items.map(c => {
               const count = getClassCount(c.name);
+              const full  = classFull(c);
               return `
-                <div class="class-card" onclick="NT2.App._showClassStudents('${c.name}','${c.fullName}')">
+                <div class="class-card" onclick="NT2.App._showClassStudents('${jsq(c.name)}','${jsq(full)}')">
                   <div class="class-icon ${iconClass}">
                     <span class="material-symbols-rounded">${icon}</span>
                   </div>
-                  <div class="class-name">${c.fullName}</div>
-                  <div class="class-count">${L('class.students')} ${count} ${L('class.unit')}</div>
+                  <div class="class-name">${esc(full)}</div>
+                  <div class="class-count">${L('class.students')} ${count}${L('class.unit') ? ' ' + L('class.unit') : ''}</div>
                 </div>`;
             }).join('')}
           </div>
@@ -1535,7 +1741,7 @@ container.innerHTML = `
       overlay.innerHTML = `
         <div class="modal" style="max-width:620px">
           <div class="modal-header">
-            <h3 class="modal-title"><span class="material-symbols-rounded">groups</span> ${L('class.modal_title')} ${fullName} ${selectedYear ? `(${selectedYear})` : ''} — (${list.length} ${L('class.unit')})</h3>
+            <h3 class="modal-title"><span class="material-symbols-rounded">groups</span> ${L('class.modal_title')} ${esc(fullName)} ${selectedYear ? `(${esc(selectedYear)})` : ''} — (${list.length}${L('class.unit') ? ' ' + L('class.unit') : ''})</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
           </div>
           <div class="modal-body" style="max-height:70vh;overflow-y:auto">
@@ -1554,8 +1760,8 @@ container.innerHTML = `
                     ${list.map((s, i) => {
                       const displayName = s.nameLao || s.nameEn || '—';
                       const initialChar = initials(displayName);
-                      const escapedName = displayName.replace(/'/g, "\\'");
-                      const escapedSub  = (fullName || '').replace(/'/g, "\\'");
+                      const photo = (s.photoUrl || '').trim();
+                      const hasPhoto = photo.startsWith('http');
 
                       return `
                       <tr>
@@ -1563,14 +1769,14 @@ container.innerHTML = `
                         <td>
                           <div class="person-avatar" style="width:32px;height:32px;font-size:0.8rem;cursor:pointer"
                                title="${L('common.see_photo')}"
-                               onclick="event.stopPropagation(); NT2.App.zoomImage('${s.photoUrl||''}', '${escapedName}', '${escapedSub}')">
-                            ${s.photoUrl && s.photoUrl.trim().startsWith('http')
-                              ? `<img src="${s.photoUrl.trim()}" onerror="this.parentElement.textContent='${initialChar}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
-                              : initialChar}
+                               onclick="event.stopPropagation(); NT2.App.zoomImage('${jsq(photo)}', '${jsq(displayName)}', '${jsq(fullName || '')}')">
+                            ${hasPhoto
+                              ? `<img src="${esc(photo)}" onerror="this.parentElement.textContent='${jsq(initialChar)}'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`
+                              : esc(initialChar)}
                           </div>
                         </td>
-                        <td style="font-weight:500">${displayName}</td>
-                        <td style="font-size:0.82rem;color:var(--text-secondary);font-family:'Inter'">${s.nameEn || '—'}</td>
+                        <td style="font-weight:500">${esc(displayName)}</td>
+                        <td style="font-size:0.82rem;color:var(--text-secondary);font-family:'Inter'">${esc(s.nameEn) || '—'}</td>
                       </tr>`;
                     }).join('')}
                   </tbody>
@@ -1583,6 +1789,9 @@ container.innerHTML = `
       document.body.appendChild(overlay);
     }
   };
+
+  /* Expose toast helper for other modules (auth.js, etc.) */
+  NT2.App.showToast = showToast;
 
   /* ─────────────────────────────────────────
      BOOT

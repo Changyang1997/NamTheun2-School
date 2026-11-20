@@ -3,6 +3,9 @@
 
   const dict = {
     lo: {
+      'app.title': 'ໂຮງຮຽນ ນ້ຳເທີນ2 - ລະບົບຈັດການໂຮງຮຽນ',
+      'app.description': 'ລະບົບຈັດການໂຮງຮຽນ ນ້ຳເທີນ2 - ຂໍ້ມູນຄູ, ນັກຮຽນ, ຕາຕະລາງ, ຄະແນນ',
+      'footer.copyright': '© 2026 ນັກພັດທະນາ ຈ່າງຢ່າງ ແດນສະຫວັນ',
       'nav.dashboard': 'ໜ້າຫຼັກ',
       'nav.teachers': 'ຄູອາຈານ',
       'nav.students': 'ນັກຮຽນ',
@@ -67,6 +70,7 @@
       'toast.added_student': 'ເພີ່ມຂໍ້ມູນນັກຮຽນສຳເລັດ!',
       'toast.updated_student': 'ແກ້ໄຂຂໍ້ມູນນັກຮຽນສຳເລັດ!',
       'toast.deleted_student': 'ລຶບຂໍ້ມູນນັກຮຽນສຳເລັດ!',
+      'toast.sched_saved': 'ບັນທຶກຕາຕະລາງລົງ Google Sheet ສຳເລັດ!',
       'noLink.scores': 'ຍັງບໍ່ທັນໄດ້ໃສ່ລິ້ງ — ກະລຸນາໃສ່ URL ໃນ Google Sheet tab "scores_links"',
       'noLink.attendance': 'ຍັງບໍ່ທັນໄດ້ໃສ່ລິ້ງ — ກະລຸນາໃສ່ URL ໃນ Google Sheet (ແຖວ 3)',
       'toast.year_selected': 'ເລືອກສົກຮຽນ',
@@ -157,6 +161,7 @@
 
       'score.title_full': 'ລະບົບຄະແນນ',
       'score.rules': 'ກົດລະບຽບຕັດຄະແນນ',
+      'score.other': 'ຄະແນນອື່ນໆ',
       'score.view': 'ເບິ່ງຄະແນນ ›',
       'score.noLink': 'ຍັງບໍ່ທັນມີລິ້ງ',
       'score.edit_links': 'ແກ້ໄຂລິ້ງ',
@@ -176,7 +181,15 @@
       'sched.study': 'ຕາຕະລາງຮຽນ (ນັກຮຽນ)',
       'sched.teach': 'ຕາຕະລາງສອນ (ຄູອາຈານ)',
       'sched.empty': 'ບໍ່ພົບຂໍ້ມູນຕາຕະລາງ',
+      'sched.edit': 'ແກ້ໄຂຕາຕະລາງ',
+      'sched.edit_hint': 'ແກ້ໄຂຂໍ້ຄວາມໃນຕາຕະລາງແລ້ວກົດ ບັນທຶກ ເພື່ອອັບເດດລົງ Google Sheet',
+      'sched.no_changes': 'ບໍ່ມີການແກ້ໄຂໃດໆ',
       'sched.break': 'ພັກ',
+      'sched.day': 'ວັນ / ເວລາ',
+      'sched.day_time': 'ວັນ / ເວລາ',
+      'sched.period': 'ຄາບ',
+      'day.mon': 'ຈັນ', 'day.tue': 'ອັງຄານ', 'day.wed': 'ພຸດ', 'day.thu': 'ພະຫັດ',
+      'day.fri': 'ສຸກ', 'day.sat': 'ເສາ', 'day.sun': 'ອາທິດ',
 
       'class.title_full': 'ຊັ້ນຮຽນທັງໝົດ',
       'class.kinder': 'ອະນຸບານສຶກສາ',
@@ -203,6 +216,9 @@
       'rules.fail_m': 'ບໍ່ຜ່ານ'
     },
     en: {
+      'app.title': 'Nam Theun 2 School - School Management System',
+      'app.description': 'Nam Theun 2 School Management System - teachers, students, schedule, scores',
+      'footer.copyright': '© 2026 Developer: ຈ່າງຢ່າງ ແດນສະຫວັນ',
       'nav.dashboard': 'Dashboard',
       'nav.teachers': 'Teachers',
       'nav.students': 'Students',
@@ -267,6 +283,7 @@
       'toast.added_student': 'Student added!',
       'toast.updated_student': 'Student updated!',
       'toast.deleted_student': 'Student deleted!',
+      'toast.sched_saved': 'Schedule saved to Google Sheet!',
       'noLink.scores': 'No link yet — please add the URL in the "scores_links" Google Sheet tab',
       'noLink.attendance': 'No link yet — please add the URL in Google Sheet (row 3)',
       'toast.year_selected': 'Selected year',
@@ -357,6 +374,7 @@
 
       'score.title_full': 'Score System',
       'score.rules': 'Grading Rules',
+      'score.other': 'Other Scores',
       'score.view': 'View Scores ›',
       'score.noLink': 'No link yet',
       'score.edit_links': 'Edit Links',
@@ -376,7 +394,15 @@
       'sched.study': 'Study Schedule (Students)',
       'sched.teach': 'Teaching Schedule (Teachers)',
       'sched.empty': 'No schedule data',
+      'sched.edit': 'Edit Schedule',
+      'sched.edit_hint': 'Edit the text in the tables, then click Save to update Google Sheet',
+      'sched.no_changes': 'No changes to save',
       'sched.break': 'Break',
+      'sched.day': 'Day / Period',
+      'sched.day_time': 'Day / Time',
+      'sched.period': 'Period',
+      'day.mon': 'Monday', 'day.tue': 'Tuesday', 'day.wed': 'Wednesday', 'day.thu': 'Thursday',
+      'day.fri': 'Friday', 'day.sat': 'Saturday', 'day.sun': 'Sunday',
 
       'class.title_full': 'All Classes',
       'class.kinder': 'Kindergarten',
@@ -404,6 +430,13 @@
     }
   };
 
+  const schedDayMap = {
+    'ວັນຈັນ': 'Monday', 'ວັນອັງຄານ': 'Tuesday', 'ວັນພຸດ': 'Wednesday',
+    'ວັນພະຫັດ': 'Thursday', 'ວັນສຸກ': 'Friday', 'ວັນເສາ': 'Saturday', 'ວັນອາທິດ': 'Sunday',
+    'ຈັນ': 'Monday', 'ອັງຄານ': 'Tuesday', 'ພຸດ': 'Wednesday',
+    'ພະຫັດ': 'Thursday', 'ສຸກ': 'Friday', 'ເສາ': 'Saturday', 'ອາທິດ': 'Sunday'
+  };
+
   NT2.Lang = {
     current: 'lo',
 
@@ -413,6 +446,18 @@
       const lo = dict.lo && dict.lo[key];
       if (lo !== undefined && lo !== null) return lo;
       return (fallback !== undefined) ? fallback : key;
+    },
+
+    /* Translate a schedule day label (e.g. 'ຈັນ' → 'Monday'); leaves other text intact. */
+    dayLabel(label) {
+      const s = String(label == null ? '' : label).trim();
+      if (!s || this.current !== 'en') return s;
+      if (schedDayMap[s]) return schedDayMap[s];
+      const keys = Object.keys(schedDayMap).sort((a, b) => b.length - a.length);
+      for (const k of keys) {
+        if (s.indexOf(k) === 0) return schedDayMap[k] + s.slice(k.length);
+      }
+      return s;
     },
 
     applyStatic() {
@@ -428,7 +473,12 @@
         const txt = this.t(el.getAttribute('data-i18n-title'));
         if (txt) el.setAttribute('title', txt);
       });
+      document.querySelectorAll('[data-i18n-content]').forEach(el => {
+        const txt = this.t(el.getAttribute('data-i18n-content'));
+        if (txt) el.setAttribute('content', txt);
+      });
 
+      document.title = this.t('app.title');
       const dl = document.getElementById('langLabel');
       if (dl) dl.textContent = this.t('lang.label');
       const yl = document.getElementById('yearDropdownLabel');
@@ -457,6 +507,7 @@
 
     set(lang) {
       this.current = (lang === 'en') ? 'en' : 'lo';
+      try { localStorage.setItem('nt2_lang', this.current); } catch (e) {}
       this.apply();
     },
 
@@ -465,7 +516,9 @@
     },
 
     init() {
-      this.current = 'lo';
+      let saved = 'lo';
+      try { saved = localStorage.getItem('nt2_lang') || 'lo'; } catch (e) {}
+      this.current = (saved === 'en') ? 'en' : 'lo';
       this.applyStatic();
     }
   };

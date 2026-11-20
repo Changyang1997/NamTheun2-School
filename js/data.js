@@ -8,13 +8,14 @@
   /* ─────────────────────────────────────────
      HELPERS
   ───────────────────────────────────────── */
-  function gvizUrl(sheetName) {
-    return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+  function gvizUrl(sheetName, range) {
+    const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+    return range ? `${base}&range=${encodeURIComponent(range)}` : base;
   }
 
   // Parse Google Visualization JSON response into array of plain objects
-  async function fetchSheet(sheetName) {
-    const res  = await fetch(gvizUrl(sheetName));
+  async function fetchSheet(sheetName, range) {
+    const res  = await fetch(gvizUrl(sheetName, range));
     const text = await res.text();
     // gviz wraps JSON in:  google.visualization.Query.setResponse({...})
     const m = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
@@ -32,6 +33,23 @@
         });
         return obj;
       });
+  }
+
+  // Raw 2D grid from gviz. Unlike fetchSheet() this keeps empty rows and does not
+  // use column labels, so row index 0 is exactly the first row of the requested
+  // range (e.g. X4). Needed to map edited cells back to absolute Sheet rows.
+  async function fetchSheetRaw(sheetName, range, numCols) {
+    const res  = await fetch(gvizUrl(sheetName, range), { cache: 'no-store' });
+    const text = await res.text();
+    const m = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
+    if (!m) return null;
+    const json = JSON.parse(m[1]);
+    if (!json.table || !json.table.rows) return null;
+    const width = numCols || (json.table.cols ? json.table.cols.length : 6);
+    return json.table.rows.map(row => Array.from({ length: width }, (_, i) => {
+      const cell = row.c && row.c[i];
+      return (cell && cell.v !== null && cell.v !== undefined) ? String(cell.v) : '';
+    }));
   }
 
   /* ─────────────────────────────────────────
@@ -115,6 +133,75 @@
   }
 
   /* ─────────────────────────────────────────
+     SCHEDULE PARSER (shared shape with Code.gs)
+     Returns { layout:'block'|'time', blocks:[...], rows:[...] }
+  ───────────────────────────────────────── */
+  const SCHED_DAYS = ['ຈັນ','ອັງຄານ','ພຸດ','ພະຫັດ','ສຸກ','ເສາ','ອາທິດ',
+                      'monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+  function isDayName(s) {
+    const t = String(s == null ? '' : s).trim().toLowerCase();
+    if (!t) return false;
+    return SCHED_DAYS.some(d => t.indexOf(d) === 0);
+  }
+  function emptySchedule() { return { layout: 'block', blocks: [], rows: [] }; }
+
+  // Accepts a 6-column 2D array: [label, c1..c5]
+  function parseScheduleGrid(values) {
+    const grid = (values || []).map(r => [0,1,2,3,4,5].map(i =>
+      (r[i] == null) ? '' : String(r[i]).trim()));
+    const allEmpty = cells => cells.every(c => c === '');
+    const dayRows = grid.filter(r => !allEmpty(r.slice(1)) && isDayName(r[0])).length;
+
+    if (dayRows === 0) {
+      const flat = [];
+      grid.forEach(r => {
+        if (r[0] === '' && allEmpty(r.slice(1))) return;
+        flat.push({
+          time: r[0], mon: r[1], tue: r[2], wed: r[3], thu: r[4], fri: r[5],
+          isBreak: r[0].includes('ພັກ') || r[1].includes('ພັກ')
+        });
+      });
+      return { layout: 'time', blocks: [], rows: flat };
+    }
+
+    const blocks = [];
+    let cur = null;
+    grid.forEach(r => {
+      const label = r[0];
+      const cells = r.slice(1);
+      const hasCells = !allEmpty(cells);
+      if (label === '' && !hasCells) return;
+      if (!hasCells) { cur = { title: label, periods: [], days: [] }; blocks.push(cur); return; }
+      if (!cur) { cur = { title: '', periods: [], days: [] }; blocks.push(cur); }
+      if (isDayName(label)) cur.days.push({ label, cells });
+      else if (cur.periods.length === 0) {
+        cur.periodLabel = label;
+        cur.periods = cells;
+      }
+      else cur.days.push({ label, cells });
+    });
+    return { layout: 'block', blocks: blocks.filter(b => b.days.length > 0), rows: [] };
+  }
+
+  // Normalise any cached/incoming schedule value into the canonical shape
+  function normalizeSchedule(s) {
+    if (!s) return emptySchedule();
+    if (Array.isArray(s)) {          // legacy: plain array of {time, mon..fri}
+      return { layout: 'time', blocks: [], rows: s };
+    }
+    if (typeof s === 'object') {
+      if (Array.isArray(s.blocks) || Array.isArray(s.rows)) {
+        return {
+          layout: s.layout === 'time' ? 'time' : 'block',
+          blocks: Array.isArray(s.blocks) ? s.blocks : [],
+          rows: Array.isArray(s.rows) ? s.rows : []
+        };
+      }
+    }
+    return emptySchedule();
+  }
+
+  /* ─────────────────────────────────────────
      MAIN DATA OBJECT
   ───────────────────────────────────────── */
   NT2.Data = {
@@ -179,8 +266,8 @@
                 }
                 if (item.studySchedule || item.teachingSchedule) {
                   this.setScheduleForYear(item.name, {
-                    studySchedule: item.studySchedule || [],
-                    teachingSchedule: item.teachingSchedule || []
+                    studySchedule: normalizeSchedule(item.studySchedule),
+                    teachingSchedule: normalizeSchedule(item.teachingSchedule)
                   });
                 }
                 if (item.classCount || item.announcements) {
@@ -298,12 +385,12 @@
       return list.filter(s => s.className === cls || (s.className && s.className.includes(cls)));
     },
     getAnnouncements()          { return Array.isArray(this._cache.announcements)    ? this._cache.announcements    : []; },
-    getStudySchedule()          { return Array.isArray(this._cache.studySchedule)    ? this._cache.studySchedule    : []; },
-    getTeachingSchedule()       { return Array.isArray(this._cache.teachingSchedule) ? this._cache.teachingSchedule : []; },
+    getStudySchedule()          { return normalizeSchedule(this._cache.studySchedule);    },
+    getTeachingSchedule()       { return normalizeSchedule(this._cache.teachingSchedule); },
     getScoreLinks()             { return Array.isArray(this._cache.scoreLinks)       ? this._cache.scoreLinks       : []; },
     getActivities()             { return Array.isArray(this._cache.activities)       ? this._cache.activities       : []; },
     getGradingRules()           { return this._cache.gradingRules || '';                       },
-    getClassCount()             { return 0; },
+    getClassCount()             { return this.getAllClasses().length; },
     isLive()                    { return this._usingLive; },
 
     _schoolInfoCache: {},
@@ -524,15 +611,27 @@
         "ອ1": "#", "ອ2": "#", "ອ3": "#",
         "ປ1": "#", "ປ2": "#", "ປ3": "#", "ປ4": "#", "ປ5": "#",
         "ມ1": "#", "ມ2": "#", "ມ3": "#", "ມ4": "#", "ມ5": "#", "ມ6": "#", "ມ7": "#",
-        "rules": "#"
+        "rules": "#", "other": "#"
       };
     },
 
     async fetchScoreLinksForYear(year) {
       if (!year) return this.getScoreLinksForYear(year);
 
+      // "ຄະແນນອື່ນໆ" ຢູ່ທີ່ Y2 ຂອງແຕ່ລະ Sheet ສົກຮຽນ.
+      // ດຶງກົງຈາກ gviz ເພື່ອໃຫ້ໃຊ້ໄດ້ທັນທີ ເຖິງແມ່ນຍັງບໍ່ໄດ້ Deploy Code.gs ໃໝ່.
+      const fetchOtherUrl = async () => {
+        try {
+          const rows = await fetchSheet(year, 'Y2');
+          const v = rows && rows[0] ? (rows[0].col0 || '') : '';
+          return v ? String(v).trim() : '';
+        } catch (e) { return ''; }
+      };
+
       if (this._scoreLinksByYearCache[year]) {
-        return this._scoreLinksByYearCache[year];
+        const cached = this._scoreLinksByYearCache[year];
+        if (!cached.other) cached.other = await fetchOtherUrl() || '#';
+        return cached;
       }
 
       // Try Apps Script endpoint
@@ -541,17 +640,19 @@
         if (res.ok) {
           const json = await res.json();
           if (json && json.status === 'success' && json.scoreLinks) {
-            this.setScoreLinksForYear(year, json.scoreLinks);
-            return json.scoreLinks;
+            const links = json.scoreLinks;
+            if (!links.other) links.other = await fetchOtherUrl() || '#';
+            this.setScoreLinksForYear(year, links);
+            return links;
           }
         }
       } catch (e) {}
 
-      // Fallback gviz fetch: Row 2 (index 0 in rows)
+      // Fallback gviz fetch: ໃຊ້ range ຊັດເຈນ A2:Y2 ຂອງ Sheet ສົກຮຽນ
       try {
-        const rows = await fetchSheet(year);
+        const rows = await fetchSheet(year, 'A2:Y2');
         if (rows && rows.length > 0) {
-          const r = rows[0]; // Row 2
+          const r = rows[0];
           const keys = Object.keys(r);
 
           const links = {
@@ -570,7 +671,8 @@
             "ມ5": r['col18'] || (keys[18] ? r[keys[18]] : '#'),
             "ມ6": r['col19'] || (keys[19] ? r[keys[19]] : '#'),
             "ມ7": r['col20'] || (keys[20] ? r[keys[20]] : '#'),
-            "rules": r['col23'] || (keys[23] ? r[keys[23]] : '#')
+            "rules": r['col23'] || (keys[23] ? r[keys[23]] : '#'),
+            "other": r['col24'] || (keys[24] ? r[keys[24]] : '#')
           };
 
           this.setScoreLinksForYear(year, links);
@@ -681,78 +783,156 @@
         if (res.ok) {
           const json = await res.json();
           if (json && json.status === 'success') {
-            const studySchedule    = (json.studySchedule && json.studySchedule.length > 0)    ? json.studySchedule    : this.getStudySchedule();
-            const teachingSchedule = (json.teachingSchedule && json.teachingSchedule.length > 0) ? json.teachingSchedule : this.getTeachingSchedule();
-            
-            const sched = { studySchedule, teachingSchedule };
+            const study    = normalizeSchedule(json.studySchedule);
+            const teaching = normalizeSchedule(json.teachingSchedule);
+            const hasStudy = (study.blocks && study.blocks.length) || (study.rows && study.rows.length);
+            const hasTeach = (teaching.blocks && teaching.blocks.length) || (teaching.rows && teaching.rows.length);
+
+            const sched = {
+              studySchedule:    hasStudy ? study    : this.getStudySchedule(),
+              teachingSchedule: hasTeach ? teaching : this.getTeachingSchedule()
+            };
             this.setScheduleForYear(year, sched);
             return sched;
           }
         }
       } catch (e) {}
 
-      // Fallback gviz fetch: Row 6+ (index 4 in rows)
+      // Fallback gviz fetch: gviz already returns rows starting at the schedule title row (X4 / AE4)
       try {
         const rows = await fetchSheet(year);
-        if (rows && rows.length >= 5) {
-          const schedRows = rows.slice(4); // Row 6 and down
-          const studySchedule = [];
-          const teachingSchedule = [];
-
-          schedRows.forEach(r => {
+        if (rows && rows.length) {
+          const schedRows = rows;
+          // Student schedule: Col X:AC -> indexes 23..28
+          const stGrid = schedRows.map(r => {
             const keys = Object.keys(r);
-
-            // Student Schedule (Col X:AC -> indexes 23..28)
-            const stTime = String(r['col23'] || (keys[23] ? r[keys[23]] : '')).trim();
-            const stMon  = String(r['col24'] || (keys[24] ? r[keys[24]] : '')).trim();
-            const stTue  = String(r['col25'] || (keys[25] ? r[keys[25]] : '')).trim();
-            const stWed  = String(r['col26'] || (keys[26] ? r[keys[26]] : '')).trim();
-            const stThu  = String(r['col27'] || (keys[27] ? r[keys[27]] : '')).trim();
-            const stFri  = String(r['col28'] || (keys[28] ? r[keys[28]] : '')).trim();
-
-            if (stTime || stMon || stTue || stWed || stThu || stFri) {
-              studySchedule.push({
-                time: stTime,
-                mon: stMon,
-                tue: stTue,
-                wed: stWed,
-                thu: stThu,
-                fri: stFri,
-                isBreak: stMon.includes('ພັກ') || stTime.includes('ພັກ')
-              });
-            }
-
-            // Teacher Schedule (Col AE:AJ -> indexes 30..35)
-            const tcTime = String(r['col30'] || (keys[30] ? r[keys[30]] : '')).trim();
-            const tcMon  = String(r['col31'] || (keys[31] ? r[keys[31]] : '')).trim();
-            const tcTue  = String(r['col32'] || (keys[32] ? r[keys[32]] : '')).trim();
-            const tcWed  = String(r['col33'] || (keys[33] ? r[keys[33]] : '')).trim();
-            const tcThu  = String(r['col34'] || (keys[34] ? r[keys[34]] : '')).trim();
-            const tcFri  = String(r['col35'] || (keys[35] ? r[keys[35]] : '')).trim();
-
-            if (tcTime || tcMon || tcTue || tcWed || tcThu || tcFri) {
-              teachingSchedule.push({
-                time: tcTime,
-                mon: tcMon,
-                tue: tcTue,
-                wed: tcWed,
-                thu: tcThu,
-                fri: tcFri,
-                isBreak: tcMon.includes('ພັກ') || tcTime.includes('ພັກ')
-              });
-            }
+            const g = i => String(r['col' + i] || (keys[i] ? r[keys[i]] : '')).trim();
+            return [g(23), g(24), g(25), g(26), g(27), g(28)];
+          });
+          // Teacher schedule: Col AE:AJ -> indexes 30..35
+          const tcGrid = schedRows.map(r => {
+            const keys = Object.keys(r);
+            const g = i => String(r['col' + i] || (keys[i] ? r[keys[i]] : '')).trim();
+            return [g(30), g(31), g(32), g(33), g(34), g(35)];
           });
 
-          const finalStudy    = studySchedule.length > 0    ? studySchedule    : this.getStudySchedule();
-          const finalTeaching = teachingSchedule.length > 0 ? teachingSchedule : this.getTeachingSchedule();
-          
-          const sched = { studySchedule: finalStudy, teachingSchedule: finalTeaching };
+          const study    = parseScheduleGrid(stGrid);
+          const teaching = parseScheduleGrid(tcGrid);
+          const hasStudy = study.blocks.length || study.rows.length;
+          const hasTeach = teaching.blocks.length || teaching.rows.length;
+
+          const sched = {
+            studySchedule:    hasStudy ? study    : this.getStudySchedule(),
+            teachingSchedule: hasTeach ? teaching : this.getTeachingSchedule()
+          };
           this.setScheduleForYear(year, sched);
           return sched;
         }
       } catch(e) {}
 
       return this.getScheduleForYear(year);
+    },
+
+    /* ── SCHEDULE GRID (for admin inline editing) ───────────────
+       Returns raw 6-column grids with their absolute Sheet origin:
+       {
+         study: { startRow:4, startCol:24, values:[[v,...],...] },  // X:AC
+         teach: { startRow:4, startCol:31, values:[[v,...],...] }   // AE:AJ
+       }
+       Works with the current (old) Apps Script deployment via gviz fallback. */
+    _scheduleGridByYearCache: {},
+
+    async fetchScheduleGridForYear(year) {
+      if (!year) return null;
+      if (this._scheduleGridByYearCache[year]) return this._scheduleGridByYearCache[year];
+
+      // 1. New Apps Script deployment: exact ranges with absolute origins.
+      try {
+        const res = await fetch(`${APPS_SCRIPT_URL}?action=getScheduleGrid&sheet=${encodeURIComponent(year)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.status === 'success' && json.study && json.teach) {
+            const grid = {
+              study: {
+                startRow: Number(json.study.startRow) || 4,
+                startCol: Number(json.study.startCol) || 24,
+                values: json.study.values || []
+              },
+              teach: {
+                startRow: Number(json.teach.startRow) || 4,
+                startCol: Number(json.teach.startCol) || 31,
+                values: json.teach.values || []
+              }
+            };
+            this._scheduleGridByYearCache[year] = grid;
+            return grid;
+          }
+        }
+      } catch (e) {}
+
+      // 2. Fallback: gviz ranges start exactly at row 4 (trailing empty rows trimmed).
+      try {
+        const [stValues, tcValues] = await Promise.all([
+          fetchSheetRaw(year, 'X4:AC', 6),
+          fetchSheetRaw(year, 'AE4:AJ', 6)
+        ]);
+        if (stValues && tcValues) {
+          const grid = {
+            study: { startRow: 4, startCol: 24, values: stValues },
+            teach: { startRow: 4, startCol: 31, values: tcValues }
+          };
+          this._scheduleGridByYearCache[year] = grid;
+          return grid;
+        }
+      } catch (e) {}
+
+      return null;
+    },
+
+    // edits: [{ kind:'study'|'teach', row:<absolute sheet row>, col:<0..5>, value:<string> }]
+    async saveScheduleCells(year, edits) {
+      if (!year || !Array.isArray(edits) || !edits.length) return false;
+
+      const queryString = new URLSearchParams({
+        action: 'saveScheduleCells',
+        sheet: year,
+        cells: JSON.stringify(edits)
+      }).toString();
+      const url = `${APPS_SCRIPT_URL}?${queryString}`;
+
+      // The OLD deployment falls through to its DEFAULT branch and still replies
+      // { status:'success' } without writing anything. Require the explicit
+      // action + saved count from the new script before reporting success.
+      const isValid = json => !!(
+        json && json.status === 'success' &&
+        json.action === 'saveScheduleCells' && (json.saved || 0) > 0
+      );
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
+        const res = await fetch(url, { method: 'GET', mode: 'cors', signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json && typeof json.status === 'string') {
+            if (isValid(json)) {
+              delete this._schedulesByYearCache[year];
+              delete this._scheduleGridByYearCache[year];
+              return true;
+            }
+            return false;
+          }
+        }
+      } catch (e) {}
+
+      const json = await this._jsonp(url);
+      if (isValid(json)) {
+        delete this._schedulesByYearCache[year];
+        delete this._scheduleGridByYearCache[year];
+        return true;
+      }
+      return false;
     },
 
     _dashboardByYearCache: {},
@@ -798,11 +978,35 @@
       };
     },
 
+    // JSONP helper: returns the parsed response object, or null on error/timeout.
+    _jsonp(url) {
+      return new Promise((resolve) => {
+        const callbackName = 'nt2_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        const script = document.createElement('script');
+        let done = false;
+
+        const finish = (value) => {
+          if (done) return;
+          done = true;
+          try { delete window[callbackName]; } catch (e) { window[callbackName] = undefined; }
+          if (script.parentNode) script.remove();
+          resolve(value);
+        };
+
+        window[callbackName] = function (resp) { finish(resp || null); };
+        script.src = `${url}&callback=${callbackName}&_t=${Date.now()}`;
+        script.onerror = () => finish(null);
+        document.head.appendChild(script);
+
+        setTimeout(() => finish(null), 10000);
+      });
+    },
+
     async _sendToAppsScript(params) {
       const queryString = new URLSearchParams(params).toString();
       const url = `${APPS_SCRIPT_URL}?${queryString}`;
 
-      // 1. Try standard CORS fetch
+      // 1. Standard CORS fetch (fast path — only works if the deployment returns CORS headers)
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 7000);
@@ -810,37 +1014,20 @@
         clearTimeout(timeoutId);
         if (res.ok) {
           const json = await res.json().catch(() => null);
-          if (json && json.status === 'success') return true;
+          if (json && typeof json.status === 'string') return json.status === 'success';
         }
       } catch (e) {}
 
-      // 2. Try no-cors fetch (dispatches HTTP GET to Google Apps Script without CORS blockage)
+      // 2. JSONP fallback — returns the real { status } from Apps Script, so failures are detected.
+      const json = await this._jsonp(url);
+      if (json && typeof json.status === 'string') return json.status === 'success';
+
+      // 3. Last resort: no-cors ping (cannot verify the result). Report failure so the
+      //    UI does not falsely claim success.
       try {
         await fetch(url, { method: 'GET', mode: 'no-cors' });
       } catch (e) {}
-
-      // 3. Fallback to dynamic script injection (JSONP style, always succeeds in all browsers even under file:/// protocol)
-      return new Promise((resolve) => {
-        const callbackName = 'nt2_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-        const script = document.createElement('script');
-        let resolved = false;
-
-        const cleanup = () => {
-          if (resolved) return;
-          resolved = true;
-          delete window[callbackName];
-          if (script.parentNode) script.remove();
-          resolve(true);
-        };
-
-        window[callbackName] = function() { cleanup(); };
-        script.src = `${url}&callback=${callbackName}&_t=${Date.now()}`;
-        script.onload = cleanup;
-        script.onerror = cleanup;
-        document.head.appendChild(script);
-
-        setTimeout(cleanup, 4500);
-      });
+      return false;
     },
 
     clearYearCache(year) {
@@ -848,7 +1035,8 @@
       delete this._teachersByYearCache[year];
       delete this._studentsByYearCache[year];
       delete this._dashboardByYearCache[year];
-      delete this._scheduleByYearCache[year];
+      delete this._schedulesByYearCache[year];
+      delete this._scheduleGridByYearCache[year];
     },
 
     async addTeacher(year, teacher) {
@@ -988,22 +1176,35 @@
 
     getAllClasses() {
       return [
-        { level:'kindergarten', name:'ອ1', fullName:'ອະນຸບານ 1' },
-        { level:'kindergarten', name:'ອ2', fullName:'ອະນຸບານ 2' },
-        { level:'kindergarten', name:'ອ3', fullName:'ອະນຸບານ 3' },
-        { level:'primary',      name:'ປ1', fullName:'ປະຖົມ 1'    },
-        { level:'primary',      name:'ປ2', fullName:'ປະຖົມ 2'    },
-        { level:'primary',      name:'ປ3', fullName:'ປະຖົມ 3'    },
-        { level:'primary',      name:'ປ4', fullName:'ປະຖົມ 4'    },
-        { level:'primary',      name:'ປ5', fullName:'ປະຖົມ 5'    },
-        { level:'secondary',    name:'ມ1', fullName:'ມັດທະຍົມ 1' },
-        { level:'secondary',    name:'ມ2', fullName:'ມັດທະຍົມ 2' },
-        { level:'secondary',    name:'ມ3', fullName:'ມັດທະຍົມ 3' },
-        { level:'secondary',    name:'ມ4', fullName:'ມັດທະຍົມ 4' },
-        { level:'secondary',    name:'ມ5', fullName:'ມັດທະຍົມ 5' },
-        { level:'secondary',    name:'ມ6', fullName:'ມັດທະຍົມ 6' },
-        { level:'secondary',    name:'ມ7', fullName:'ມັດທະຍົມ 7' }
+        { level:'kindergarten', name:'ອ1', fullName:'ອະນຸບານ 1', fullNameEn:'Kindergarten 1' },
+        { level:'kindergarten', name:'ອ2', fullName:'ອະນຸບານ 2', fullNameEn:'Kindergarten 2' },
+        { level:'kindergarten', name:'ອ3', fullName:'ອະນຸບານ 3', fullNameEn:'Kindergarten 3' },
+        { level:'primary',      name:'ປ1', fullName:'ປະຖົມ 1',    fullNameEn:'Primary 1'      },
+        { level:'primary',      name:'ປ2', fullName:'ປະຖົມ 2',    fullNameEn:'Primary 2'      },
+        { level:'primary',      name:'ປ3', fullName:'ປະຖົມ 3',    fullNameEn:'Primary 3'      },
+        { level:'primary',      name:'ປ4', fullName:'ປະຖົມ 4',    fullNameEn:'Primary 4'      },
+        { level:'primary',      name:'ປ5', fullName:'ປະຖົມ 5',    fullNameEn:'Primary 5'      },
+        { level:'secondary',    name:'ມ1', fullName:'ມັດທະຍົມ 1', fullNameEn:'Secondary 1'    },
+        { level:'secondary',    name:'ມ2', fullName:'ມັດທະຍົມ 2', fullNameEn:'Secondary 2'    },
+        { level:'secondary',    name:'ມ3', fullName:'ມັດທະຍົມ 3', fullNameEn:'Secondary 3'    },
+        { level:'secondary',    name:'ມ4', fullName:'ມັດທະຍົມ 4', fullNameEn:'Secondary 4'    },
+        { level:'secondary',    name:'ມ5', fullName:'ມັດທະຍົມ 5', fullNameEn:'Secondary 5'    },
+        { level:'secondary',    name:'ມ6', fullName:'ມັດທະຍົມ 6', fullNameEn:'Secondary 6'    },
+        { level:'secondary',    name:'ມ7', fullName:'ມັດທະຍົມ 7', fullNameEn:'Secondary 7'    }
       ];
+    },
+
+    /* Display label for a class in the current language */
+    classLabel(cls) {
+      if (!cls) return '';
+      const en = window.NT2 && NT2.Lang && NT2.Lang.current === 'en';
+      return (en && cls.fullNameEn) ? cls.fullNameEn : cls.fullName;
+    },
+
+    /* Localised display label for a class code (e.g. 'ອ1' → 'Kindergarten 1') */
+    classLabelByName(code) {
+      const c = this.getAllClasses().find(x => x.name === code);
+      return c ? this.classLabel(c) : (code || '');
     }
   };
 })();

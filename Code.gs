@@ -14,6 +14,88 @@
 
 const SPREADSHEET_ID = "1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc";
 
+/**
+ * ວິເຄາະຕາຕະລາງຮຽນ/ສອນ ຈາກ 6 ຄໍລຳ (col1 = ປ້າຍແຖວ, col2..col6 = ຄ່າ).
+ * ຮອງຮັບ 2 ຮູບແບບ:
+ *   A) "block"  — ແຖວ = ວັນ (ຈັນ..ສຸກ), ຄໍລຳ = ຄາບເວລາ; ແຍກເປັນ block ຕໍ່ຫ້ອງ/ຄູ
+ *   B) "time"   — ແຖວ = ຄາບເວລາ, ຄໍລຳ = ວັນ (ຮູບແບບເກົ່າ)
+ */
+function parseScheduleGrid_(values) {
+  var DAYS = ["ຈັນ", "ອັງຄານ", "ພຸດ", "ພະຫັດ", "ສຸກ", "ເສາ", "ອາທິດ",
+              "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+  function isDay(s) {
+    var t = String(s || "").trim().toLowerCase();
+    if (!t) return false;
+    for (var i = 0; i < DAYS.length; i++) {
+      if (t.indexOf(DAYS[i].toLowerCase()) === 0) return true;
+    }
+    return false;
+  }
+  function cell(v) { return (v === null || v === undefined) ? "" : String(v).trim(); }
+  function allEmpty(cells) {
+    for (var i = 0; i < cells.length; i++) { if (cells[i] !== "") return false; }
+    return true;
+  }
+
+  var rows = [];
+  (values || []).forEach(function (r) {
+    rows.push([cell(r[0]), cell(r[1]), cell(r[2]), cell(r[3]), cell(r[4]), cell(r[5])]);
+  });
+
+  var dayRowCount = 0;
+  rows.forEach(function (r) {
+    if (!allEmpty(r.slice(1)) && isDay(r[0])) dayRowCount++;
+  });
+
+  // ---- ຮູບແບບ B: ແຖວ = ຄາບເວລາ, ຄໍລຳ = ວັນ ----
+  if (dayRowCount === 0) {
+    var flat = [];
+    rows.forEach(function (r) {
+      if (r[0] === "" && allEmpty(r.slice(1))) return;
+      flat.push({
+        time: r[0], mon: r[1], tue: r[2], wed: r[3], thu: r[4], fri: r[5],
+        isBreak: r[0].indexOf("ພັກ") !== -1 || r[1].indexOf("ພັກ") !== -1
+      });
+    });
+    return { layout: "time", blocks: [], rows: flat };
+  }
+
+  // ---- ຮູບແບບ A: ແຖວ = ວັນ, ຈັດກຸ່ມຕໍ່ຫ້ອງ/ຄູ ----
+  var blocks = [];
+  var cur = null;
+  rows.forEach(function (r) {
+    var label = r[0];
+    var cells = r.slice(1);
+    var hasCells = !allEmpty(cells);
+    if (label === "" && !hasCells) return;             // ແຖວຫວ່າງ
+    if (!hasCells) { cur = { title: label, periods: [], days: [] }; blocks.push(cur); return; } // ຫົວຊື່ block
+    if (!cur) { cur = { title: "", periods: [], days: [] }; blocks.push(cur); }
+    if (isDay(label)) {
+      cur.days.push({ label: label, cells: cells });
+    } else if (cur.periods.length === 0) {
+      cur.periodLabel = label;                          // ປ້າຍຫົວຄາບເວລາຈາກ Sheet
+      cur.periods = cells;                              // ແຖວຫົວຄາບເວລາ
+    } else {
+      cur.days.push({ label: label, cells: cells });
+    }
+  });
+
+  blocks = blocks.filter(function (b) { return b.days.length > 0; });
+  return { layout: "block", blocks: blocks, rows: [] };
+}
+
+function emptySchedule_() { return { layout: "block", blocks: [], rows: [] }; }
+
+// ອ່ານຕາຕະລາງດິບໆ 6 ຄໍລຳ ໂດຍເລີ່ມຈາກແຖວ 4 ພ້ອມເກັບຕຳແໜ່ງແທ້ຂອງ Sheet
+function scheduleGridValues_(sheet, startCol, maxRows) {
+  var values = sheet.getRange(4, startCol, maxRows, 6).getValues();
+  return values.map(function(row) {
+    return row.map(function(v) {
+      return (v === null || v === undefined) ? "" : String(v).trim();
+    });
+  });
+}
+
 function doPost(e) {
   return handleRequest(e);
 }
@@ -48,7 +130,7 @@ function handleRequest(e) {
           "ອ1": "", "ອ2": "", "ອ3": "",
           "ປ1": "", "ປ2": "", "ປ3": "", "ປ4": "", "ປ5": "",
           "ມ1": "", "ມ2": "", "ມ3": "", "ມ4": "", "ມ5": "", "ມ6": "", "ມ7": "",
-          "rules": ""
+          "rules": "", "other": ""
         };
         var attendanceLinks = {
           "ອ1": "", "ອ2": "", "ອ3": "",
@@ -58,7 +140,7 @@ function handleRequest(e) {
         };
         
         try {
-          var range = sheet.getRange("A2:X3").getValues();
+          var range = sheet.getRange("A2:Y3").getValues();
           if (range && range.length > 0) {
             var row2 = range[0];
             logo = row2[0] ? row2[0].toString() : "";       // Col A
@@ -84,6 +166,7 @@ function handleRequest(e) {
             scoreLinks["ມ7"] = row2[20] ? row2[20].toString() : "";// Col U
             
             scoreLinks["rules"] = row2[23] ? row2[23].toString() : "";// Col X
+            scoreLinks["other"] = row2[24] ? row2[24].toString() : "";// Col Y (ຄະແນນອື່ນໆ)
 
             // Row 3 = attendance links
             if (range.length > 1) {
@@ -215,64 +298,20 @@ function handleRequest(e) {
           }
         } catch(ex) {}
 
-        // 1. ດຶງຂໍ້ມູນຕາຕະລາງຮຽນນັກຮຽນ (Col X:AC = Col 24..29, Row 6+)
-        var studySchedule = [];
+        // 1. ດຶງຂໍ້ມູນຕາຕະລາງຮຽນນັກຮຽນ (Col X:AC = Col 24..29, Row 4+)
+        var studySchedule = emptySchedule_();
         try {
-          var maxR1 = Math.max(sheet.getLastRow() - 5, 50);
-          var stValues = sheet.getRange(6, 24, maxR1, 6).getValues();
-          stValues.forEach(function(row) {
-            var stTime = row[0] ? row[0].toString().trim() : "";
-            var stMon  = row[1] ? row[1].toString().trim() : "";
-            var stTue  = row[2] ? row[2].toString().trim() : "";
-            var stWed  = row[3] ? row[3].toString().trim() : "";
-            var stThu  = row[4] ? row[4].toString().trim() : "";
-            var stFri  = row[5] ? row[5].toString().trim() : "";
-
-            // ຕັດແຖວທີ່ເປັນຫົວຕາຕະລາງ ວັນຈັນ-ວັນສຸກ ອອກຖ້າມີ
-            if (stMon === "ວັນຈັນ" || stTime === "ເວລາ") return;
-
-            if (stTime || stMon || stTue || stWed || stThu || stFri) {
-              studySchedule.push({
-                time: stTime,
-                mon: stMon,
-                tue: stTue,
-                wed: stWed,
-                thu: stThu,
-                fri: stFri,
-                isBreak: stMon.indexOf('ພັກ') !== -1 || stTime.indexOf('ພັກ') !== -1
-              });
-            }
-          });
+          var maxR1 = Math.max(sheet.getLastRow() - 3, 50);
+          var stValues = sheet.getRange(4, 24, maxR1, 6).getValues();
+          studySchedule = parseScheduleGrid_(stValues);
         } catch(ex) {}
 
-        // 2. ດຶງຂໍ້ມູນຕາຕະລາງສອນຄູອາຈານ (Col AE:AJ = Col 31..36, Row 6+)
-        var teachingSchedule = [];
+        // 2. ດຶງຂໍ້ມູນຕາຕະລາງສອນຄູອາຈານ (Col AE:AJ = Col 31..36, Row 4+)
+        var teachingSchedule = emptySchedule_();
         try {
-          var maxR2 = Math.max(sheet.getLastRow() - 5, 50);
-          var tcValues = sheet.getRange(6, 31, maxR2, 6).getValues();
-          tcValues.forEach(function(row) {
-            var tcTime = row[0] ? row[0].toString().trim() : "";
-            var tcMon  = row[1] ? row[1].toString().trim() : "";
-            var tcTue  = row[2] ? row[2].toString().trim() : "";
-            var tcWed  = row[3] ? row[3].toString().trim() : "";
-            var tcThu  = row[4] ? row[4].toString().trim() : "";
-            var tcFri  = row[5] ? row[5].toString().trim() : "";
-
-            // ຕັດແຖວທີ່ເປັນຫົວຕາຕະລາງ ວັນຈັນ-ວັນສຸກ ອອກຖ້າມີ
-            if (tcMon === "ວັນຈັນ" || tcTime === "ເວລາ") return;
-
-            if (tcTime || tcMon || tcTue || tcWed || tcThu || tcFri) {
-              teachingSchedule.push({
-                time: tcTime,
-                mon: tcMon,
-                tue: tcTue,
-                wed: tcWed,
-                thu: tcThu,
-                fri: tcFri,
-                isBreak: tcMon.indexOf('ພັກ') !== -1 || tcTime.indexOf('ພັກ') !== -1
-              });
-            }
-          });
+          var maxR2 = Math.max(sheet.getLastRow() - 3, 50);
+          var tcValues = sheet.getRange(4, 31, maxR2, 6).getValues();
+          teachingSchedule = parseScheduleGrid_(tcValues);
         } catch(ex) {}
 
         return {
@@ -632,59 +671,15 @@ function handleRequest(e) {
       if (!targetSheet) {
         result = { status: "error", message: "ບໍ່ພົບ Sheet Tab: " + sheetName };
       } else {
-        var studySchedule = [];
-        var maxR1 = Math.max(targetSheet.getLastRow() - 5, 50);
-        var stValues = targetSheet.getRange(6, 24, maxR1, 6).getValues();
-        stValues.forEach(function(row) {
-          var stTime = row[0] ? row[0].toString().trim() : "";
-          var stMon  = row[1] ? row[1].toString().trim() : "";
-          var stTue  = row[2] ? row[2].toString().trim() : "";
-          var stWed  = row[3] ? row[3].toString().trim() : "";
-          var stThu  = row[4] ? row[4].toString().trim() : "";
-          var stFri  = row[5] ? row[5].toString().trim() : "";
+        var studySchedule = emptySchedule_();
+        var maxR1 = Math.max(targetSheet.getLastRow() - 3, 50);
+        var stValues = targetSheet.getRange(4, 24, maxR1, 6).getValues();
+        studySchedule = parseScheduleGrid_(stValues);
 
-          // ຕັດແຖວທີ່ເປັນຫົວຕາຕະລາງ ວັນຈັນ-ວັນສຸກ ອອກຖ້າມີ
-          if (stMon === "ວັນຈັນ" || stTime === "ເວລາ") return;
-
-          if (stTime || stMon || stTue || stWed || stThu || stFri) {
-            studySchedule.push({
-              time: stTime,
-              mon: stMon,
-              tue: stTue,
-              wed: stWed,
-              thu: stThu,
-              fri: stFri,
-              isBreak: stMon.indexOf('ພັກ') !== -1 || stTime.indexOf('ພັກ') !== -1
-            });
-          }
-        });
-
-        var teachingSchedule = [];
-        var maxR2 = Math.max(targetSheet.getLastRow() - 5, 50);
-        var tcValues = targetSheet.getRange(6, 31, maxR2, 6).getValues();
-        tcValues.forEach(function(row) {
-          var tcTime = row[0] ? row[0].toString().trim() : "";
-          var tcMon  = row[1] ? row[1].toString().trim() : "";
-          var tcTue  = row[2] ? row[2].toString().trim() : "";
-          var tcWed  = row[3] ? row[3].toString().trim() : "";
-          var tcThu  = row[4] ? row[4].toString().trim() : "";
-          var tcFri  = row[5] ? row[5].toString().trim() : "";
-
-          // ຕັດແຖວທີ່ເປັນຫົວຕາຕະລາງ ວັນຈັນ-ວັນສຸກ ອອກຖ້າມີ
-          if (tcMon === "ວັນຈັນ" || tcTime === "ເວລາ") return;
-
-          if (tcTime || tcMon || tcTue || tcWed || tcThu || tcFri) {
-            teachingSchedule.push({
-              time: tcTime,
-              mon: tcMon,
-              tue: tcTue,
-              wed: tcWed,
-              thu: tcThu,
-              fri: tcFri,
-              isBreak: tcMon.indexOf('ພັກ') !== -1 || tcTime.indexOf('ພັກ') !== -1
-            });
-          }
-        });
+        var teachingSchedule = emptySchedule_();
+        var maxR2 = Math.max(targetSheet.getLastRow() - 3, 50);
+        var tcValues = targetSheet.getRange(4, 31, maxR2, 6).getValues();
+        teachingSchedule = parseScheduleGrid_(tcValues);
 
         result = {
           status: "success",
@@ -708,10 +703,10 @@ function handleRequest(e) {
           "ອ1": "", "ອ2": "", "ອ3": "",
           "ປ1": "", "ປ2": "", "ປ3": "", "ປ4": "", "ປ5": "",
           "ມ1": "", "ມ2": "", "ມ3": "", "ມ4": "", "ມ5": "", "ມ6": "", "ມ7": "",
-          "rules": ""
+          "rules": "", "other": ""
         };
         try {
-          var row2 = targetSheet.getRange("A2:X2").getValues()[0];
+          var row2 = targetSheet.getRange("A2:Y2").getValues()[0];
           if (row2) {
             scoreLinks["ອ1"] = row2[4] ? row2[4].toString() : "";  // Col E
             scoreLinks["ອ2"] = row2[5] ? row2[5].toString() : "";  // Col F
@@ -732,6 +727,7 @@ function handleRequest(e) {
             scoreLinks["ມ7"] = row2[20] ? row2[20].toString() : "";// Col U
             
             scoreLinks["rules"] = row2[23] ? row2[23].toString() : "";// Col X
+            scoreLinks["other"] = row2[24] ? row2[24].toString() : "";// Col Y (ຄະແນນອື່ນໆ)
           }
         } catch(ex) {}
 
@@ -869,6 +865,56 @@ function handleRequest(e) {
           sheet: targetSheet.getName(),
           teachers: teachers
         };
+      }
+    }
+
+    // --------------------------------------------------------
+    // ACTION: GET SCHEDULE GRID (ຂໍ້ມູນດິບ + ພິກັດແຖວ/ຄໍລຳແທ້ຂອງ Sheet)
+    // --------------------------------------------------------
+    else if (action === "getScheduleGrid") {
+      var sheetName = e.parameter.sheet;
+      var targetSheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
+      if (!targetSheet) {
+        result = { status: "error", message: "ບໍ່ພົບ Sheet Tab: " + sheetName };
+      } else {
+        var maxRG = Math.max(targetSheet.getLastRow() - 3, 50);
+        result = {
+          status: "success",
+          action: "getScheduleGrid",
+          sheet: targetSheet.getName(),
+          study: { startRow: 4, startCol: 24, values: scheduleGridValues_(targetSheet, 24, maxRG) },
+          teach: { startRow: 4, startCol: 31, values: scheduleGridValues_(targetSheet, 31, maxRG) }
+        };
+      }
+    }
+
+    // --------------------------------------------------------
+    // ACTION: SAVE SCHEDULE CELLS (admin inline editing)
+    // cells = [{ kind:'study'|'teach', row:<ແຖວ Sheet>, col:<0..5>, value:<ຂໍ້ຄວາມ> }]
+    // --------------------------------------------------------
+    else if (action === "saveScheduleCells") {
+      var sheetName = e.parameter.sheet;
+      var targetSheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
+      var cells = [];
+      try { cells = JSON.parse(e.parameter.cells || "[]"); } catch (err) { cells = []; }
+
+      if (!targetSheet) {
+        result = { status: "error", message: "ບໍ່ພົບ Sheet Tab: " + sheetName };
+      } else if (!cells.length) {
+        result = { status: "error", message: "ບໍ່ມີຂໍ້ມູນທີ່ແກ້ໄຂ" };
+      } else {
+        var saved = 0;
+        cells.forEach(function(item) {
+          var row = Number(item.row);
+          var colOffset = Number(item.col);
+          var col = (item.kind === "teach" ? 31 : 24) + colOffset;
+          if (isFinite(row) && row >= 4 && colOffset >= 0 && colOffset <= 5) {
+            targetSheet.getRange(row, col).setValue(item.value == null ? "" : String(item.value));
+            saved++;
+          }
+        });
+        SpreadsheetApp.flush();
+        result = { status: "success", action: "saveScheduleCells", saved: saved };
       }
     }
 
