@@ -1,12 +1,14 @@
 /* Nam Theun 2 School — service worker (app shell cache) */
-const CACHE_NAME = 'nt2-school-v1';
+const CACHE_NAME = 'nt2-school-v7';
 
 const APP_SHELL = [
   './',
   './index.html',
+  './login.html',
   './manifest.webmanifest',
   './css/style.css',
   './js/lang.js',
+  './js/gate.js',
   './js/data.js',
   './js/auth.js',
   './js/app.js',
@@ -46,11 +48,13 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(req)
         .then(res => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy));
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
+          }
           return res;
         })
-        .catch(() => caches.match('./index.html'))
+        .catch(() => caches.match(req).then(cached => cached || caches.match('./index.html')))
     );
     return;
   }

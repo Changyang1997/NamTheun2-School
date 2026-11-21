@@ -3,7 +3,7 @@
 
   const SHEET_ID   = '1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc';
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwY5RcFeBzc5HKyEsmEBGby15KT58mSdtx_fZTva7CG8rXOCQtP01KaPJ-i9KDJIWDlPQ/exec';
-  const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
+  const AUTO_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
 
   /* ─────────────────────────────────────────
      HELPERS
@@ -322,14 +322,27 @@
       if (anyLive) this._notify('refresh');
     },
 
-    /* ── AUTO-REFRESH ────────────────────── */
+    /* ── AUTO-REFRESH (every 10 minutes) ─── */
+    async _autoRefresh() {
+      console.log('🔄 Auto-refreshing data from Google Sheets...');
+      this._setSyncStatus('loading');
+      await this._fetchAll();
+    },
+
     _startAutoRefresh() {
       if (this._refreshTimer) clearInterval(this._refreshTimer);
-      this._refreshTimer = setInterval(async () => {
-        console.log('🔄 Auto-refreshing data from Google Sheets...');
-        this._setSyncStatus('loading');
-        await this._fetchAll();
-      }, AUTO_REFRESH_MS);
+      this._refreshTimer = setInterval(() => this._autoRefresh(), AUTO_REFRESH_MS);
+
+      // Browsers throttle timers in background tabs; catch up when the tab is visible again.
+      if (!this._visibilityBound) {
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState !== 'visible') return;
+          if (!this._lastFetch) return;
+          if (Date.now() - this._lastFetch.getTime() < AUTO_REFRESH_MS) return;
+          this._autoRefresh();
+        });
+        this._visibilityBound = true;
+      }
     },
 
     /* Manual refresh (triggered by refresh button) */

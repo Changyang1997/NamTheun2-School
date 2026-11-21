@@ -50,6 +50,16 @@
       'login.success': 'ເຂົ້າສູ່ລະບົບສຳເລັດ',
       'login.loggedOut': 'ອອກຈາກລະບົບແລ້ວ',
       'login.invalid': 'ຊື່ຜູ້ໃຊ້ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ!',
+
+      'gate.title': 'ເຂົ້າສູ່ເວັບໄຊໂຮງຮຽນ',
+      'gate.subtitle': 'ກະລຸນາໃສ່ຊື່ຜູ້ໃຊ້ ແລະລະຫັດຜ່ານເພື່ອເບິ່ງຂໍ້ມູນຂອງໂຮງຮຽນ',
+      'gate.userPh': 'ໃສ່ຊື່ຜູ້ໃຊ້',
+      'gate.passPh': 'ໃສ່ລະຫັດຜ່ານ',
+      'gate.invalid': 'ຊື່ຜູ້ໃຊ້ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ!',
+      'gate.lock': 'ລັອກໜ້າເວັບ',
+      'gate.showPassword': 'ສະແດງລະຫັດຜ່ານ',
+      'gate.hidePassword': 'ເຊື່ອງລະຫັດຜ່ານ',
+
       'theme.auto': 'ໂໝດອັດຕະໂນມັດ',
       'theme.light': 'ໂໝດສະຫວ່າງ',
       'theme.dark': 'ໂໝດມືດ',
@@ -277,6 +287,16 @@
       'login.success': 'Logged in successfully',
       'login.loggedOut': 'Logged out',
       'login.invalid': 'Invalid username or password!',
+
+      'gate.title': 'School Portal Login',
+      'gate.subtitle': 'Please enter your username and password to view school information.',
+      'gate.userPh': 'Enter username',
+      'gate.passPh': 'Enter password',
+      'gate.invalid': 'Invalid username or password!',
+      'gate.lock': 'Lock app',
+      'gate.showPassword': 'Show password',
+      'gate.hidePassword': 'Hide password',
+
       'theme.auto': 'Auto mode',
       'theme.light': 'Light mode',
       'theme.dark': 'Dark mode',

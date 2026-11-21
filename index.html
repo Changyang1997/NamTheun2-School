@@ -6,6 +6,12 @@
   <title>ໂຮງຮຽນ ນ້ຳເທີນ2 - ລະບົບຈັດການໂຮງຮຽນ</title>
   <meta name="description" content="ລະບົບຈັດການໂຮງຮຽນ ນ້ຳເທີນ2 - ຂໍ້ມູນຄູ, ນັກຮຽນ, ຕາຕະລາງ, ຄະແນນ" data-i18n-content="app.description">
 
+  <!-- ENTRY GATE: block the app before any school data is loaded. -->
+  <script src="js/gate.js"></script>
+  <script>
+    if (window.NT2 && NT2.Gate) NT2.Gate.require();
+  </script>
+
   <!-- PWA -->
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#1565C0">
@@ -83,6 +89,9 @@
           <button class="theme-cycle-btn" id="themeToggleBtn" title="ສະຫຼັບໂໝດສີ" data-i18n-title="header.theme">
             <span class="material-symbols-rounded" id="themeIcon">brightness_auto</span>
           </button>
+          <button class="lock-btn" id="gateLockBtn" title="ລັອກໜ້າເວັບ" data-i18n-title="gate.lock">
+            <span class="material-symbols-rounded">lock</span>
+          </button>
         </div>
         <button class="login-btn" id="loginBtn">
           <span class="material-symbols-rounded">login</span><span data-i18n="login.login">ເຂົ້າສູ່ລະບົບ</span>
@@ -141,7 +150,13 @@
         </div>
         <div class="form-group">
           <label class="form-label" data-i18n="login.password">ລະຫັດຜ່ານ</label>
-          <input class="form-input" type="password" id="loginPassword" placeholder="ໃສ່ລະຫັດຜ່ານ" autocomplete="current-password" data-i18n-placeholder="login.passPh">
+          <div class="password-field">
+            <input class="form-input" type="password" id="loginPassword" placeholder="ໃສ່ລະຫັດຜ່ານ" autocomplete="current-password" data-i18n-placeholder="login.passPh">
+            <button class="password-toggle" type="button" data-password-toggle="#loginPassword"
+                    data-i18n-title="gate.showPassword" aria-label="Show password" aria-pressed="false">
+              <span class="material-symbols-rounded">visibility</span>
+            </button>
+          </div>
         </div>
         <div id="loginError" class="login-error hidden"></div>
       </div>

@@ -113,8 +113,8 @@ body.theme-dark {
 
 .sidebar-footer { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.1); display:flex; flex-direction:column; gap:8px; }
 .sidebar-footer-actions { display:flex; align-items:center; justify-content:center; gap:8px; }
-.sidebar-footer-actions .lang-toggle-btn, .sidebar-footer-actions .theme-cycle-btn { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); }
-.sidebar-footer-actions .lang-toggle-btn:hover, .sidebar-footer-actions .theme-cycle-btn:hover { background: rgba(255,255,255,0.2); color:#fff; }
+.sidebar-footer-actions .lang-toggle-btn, .sidebar-footer-actions .theme-cycle-btn, .sidebar-footer-actions .lock-btn { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); }
+.sidebar-footer-actions .lang-toggle-btn:hover, .sidebar-footer-actions .theme-cycle-btn:hover, .sidebar-footer-actions .lock-btn:hover { background: rgba(255,255,255,0.2); color:#fff; }
 
 .sync-status { display:flex; align-items:center; gap:6px; font-size:0.75rem; color:rgba(255,255,255,0.5); padding:4px 0; }
 .sync-icon { font-size:16px; }
@@ -178,7 +178,7 @@ body.theme-dark {
 }
 
 /* THEME CYCLE BUTTON (single button, cycles modes) */
-.theme-cycle-btn {
+.theme-cycle-btn, .lock-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -192,14 +192,14 @@ body.theme-dark {
   transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.15s;
   box-shadow: var(--shadow-sm);
 }
-.theme-cycle-btn:hover {
+.theme-cycle-btn:hover, .lock-btn:hover {
   background: var(--accent-primary);
   color: #fff;
   border-color: var(--accent-primary);
   box-shadow: 0 4px 14px rgba(21,101,192,0.3);
   transform: scale(1.08);
 }
-.theme-cycle-btn .material-symbols-rounded { font-size: 22px; }
+.theme-cycle-btn .material-symbols-rounded, .lock-btn .material-symbols-rounded { font-size: 22px; }
 
 /* PWA INSTALL BUTTON (shown only when installation is available) */
 .install-btn {
@@ -391,6 +391,20 @@ body.pwa-install-ready .install-btn { display: flex; }
 .form-input:focus, .form-select:focus, .form-textarea:focus { outline:none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(21,101,192,0.15); }
 .form-textarea { min-height: 100px; resize: vertical; }
 
+/* PASSWORD FIELD WITH VISIBILITY TOGGLE */
+.password-field { position:relative; }
+.password-field .form-input { padding-right: 46px; }
+.password-toggle {
+  position:absolute; top:50%; right:6px; transform:translateY(-50%);
+  display:flex; align-items:center; justify-content:center;
+  width:34px; height:34px; padding:0;
+  border:0; border-radius:8px; background:transparent;
+  color:var(--text-secondary); cursor:pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.password-toggle:hover { background:var(--bg-card); color:var(--accent-primary); }
+.password-toggle .material-symbols-rounded { font-size:20px; }
+
 /* MODAL */
 .modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display:none; align-items:center; justify-content:center; z-index:2000; }
 .modal-overlay.active { display:flex; }
@@ -542,6 +556,32 @@ body.admin-mode .admin-only { display:inline-flex !important; }
 .flex-center { display:flex; align-items:center; justify-content:center; }
 .gap-1 { gap:8px; } .gap-2 { gap:16px; }
 .grid-2 { display:grid; grid-template-columns: repeat(2, 1fr); gap:20px; }
+
+/* ENTRY GATE / LOGIN PAGE */
+.gate-page { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
+/* Keep the gate card above body::before (the blurred background layer). */
+.gate-wrap { position:relative; z-index:1; width:100%; display:flex; justify-content:center; }
+.gate-card {
+  width:100%; max-width:420px; padding:28px;
+  background: var(--bg-card); border:1px solid var(--border-color);
+  border-radius:18px; box-shadow: var(--shadow-lg);
+}
+.gate-brand { display:flex; align-items:center; gap:14px; margin-bottom:24px; }
+.gate-logo { width:56px; height:56px; border-radius:14px; object-fit:cover; flex:none; }
+.gate-title { font-size:1.3rem; font-weight:700; line-height:1.3; }
+.gate-subtitle { margin-top:5px; font-size:0.8rem; line-height:1.5; color: var(--text-secondary); }
+.gate-form { display:flex; flex-direction:column; gap:15px; }
+.gate-submit { width:100%; justify-content:center; padding:12px; }
+.gate-lang {
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  margin:20px auto 0; padding:7px 14px;
+  border:1px solid var(--border-color); border-radius:999px;
+  background:transparent; color:var(--text-secondary);
+  cursor:pointer; font-family:inherit; font-size:0.8rem; font-weight:600;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.gate-lang:hover { background: var(--accent-primary); color:#fff; border-color: var(--accent-primary); }
+.gate-lang .material-symbols-rounded { font-size:18px; }
 
 /* RESPONSIVE */
 

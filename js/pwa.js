@@ -73,6 +73,8 @@
 
   NT2.PWA = {
     init() {
+      if (window.NT2 && NT2.Gate && !NT2.Gate.isUnlocked()) return;
+
       // Service workers require https or localhost. Skip silently on file://.
       if ('serviceWorker' in navigator && location.protocol !== 'file:') {
         window.addEventListener('load', () => {

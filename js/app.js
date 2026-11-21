@@ -183,6 +183,12 @@
         const next  = order[(order.indexOf(cur) + 1) % order.length];
         this._setTheme(next);
       });
+
+      // Lock the whole portal and return to the entry gate
+      document.getElementById('gateLockBtn')?.addEventListener('click', () => {
+        if (window.NT2 && NT2.Gate) NT2.Gate.lock();
+        location.replace('./login.html');
+      });
     },
 
     _closeSidebar() {
@@ -1796,5 +1802,8 @@ container.innerHTML = `
   /* ─────────────────────────────────────────
      BOOT
   ───────────────────────────────────────── */
-  document.addEventListener('DOMContentLoaded', () => NT2.App.init());
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.NT2 && NT2.Gate && !NT2.Gate.isUnlocked()) return;
+    NT2.App.init();
+  });
 })();

@@ -4,7 +4,7 @@
   "description": "ລະບົບຈັດການໂຮງຮຽນ ນ້ຳເທີນ2 - ຂໍ້ມູນຄູ, ນັກຮຽນ, ຕາຕະລາງ, ຄະແນນ",
   "lang": "lo",
   "dir": "ltr",
-  "start_url": "./index.html",
+  "start_url": "./login.html",
   "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
