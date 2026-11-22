@@ -1,5 +1,5 @@
 /* Nam Theun 2 School — service worker (app shell cache) */
-const CACHE_NAME = 'nt2-school-v7';
+const CACHE_NAME = 'nt2-school-v8';
 
 const APP_SHELL = [
   './',
@@ -11,6 +11,7 @@ const APP_SHELL = [
   './js/gate.js',
   './js/data.js',
   './js/auth.js',
+  './js/score-viewer.js',
   './js/app.js',
   './js/pwa.js',
   './icons/icon-192.png',

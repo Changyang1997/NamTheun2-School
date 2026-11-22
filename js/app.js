@@ -1305,13 +1305,13 @@ container.innerHTML = `
           <div class="scores-grid">
             ${group.items.map(item => {
               const hasUrl = item.url && item.url !== '#' && item.url.trim().startsWith('http');
-              const finalUrl = hasUrl ? item.url.trim() : '#';
               return `
-                <a href="${esc(finalUrl)}" target="${hasUrl ? '_blank' : '_self'}" class="score-btn"
-                   ${!hasUrl ? 'onclick="event.preventDefault();NT2.App._noLink()"' : ''}>
+                <button type="button" class="score-btn"
+                        ${hasUrl ? `data-score-value="${esc(item.url.trim())}"` : 'data-score-empty="1"'}
+                        data-score-label="${esc(item.name)}">
                   <span class="class-label">${esc(item.name)}</span>
                   <span class="view-label">${hasUrl ? L('score.view') : L('score.noLink')}</span>
-                </a>`;
+                </button>`;
             }).join('')}
           </div>
         </div>`;
@@ -1349,6 +1349,19 @@ container.innerHTML = `
           </div>
           ${classGroups.map(renderGroup).join('')}
         </div>`;
+
+      // Open each class score inside the app (iframe for script links,
+      // built-in table viewer for a spreadsheet ID / docs link).
+      container.querySelectorAll('[data-score-value]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (window.NT2 && NT2.ScoreViewer) {
+            NT2.ScoreViewer.open({ label: btn.dataset.scoreLabel, value: btn.dataset.scoreValue });
+          }
+        });
+      });
+      container.querySelectorAll('[data-score-empty]').forEach(btn => {
+        btn.addEventListener('click', () => this._noLink());
+      });
     },
 
     /* ── ATTENDANCE ───────────────────────── */

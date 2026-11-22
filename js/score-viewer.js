@@ -1,0 +1,331 @@
+/* Nam Theun 2 School — in-app score viewer.
+   Clicking a class score button opens a modal:
+     - Apps Script URL / other http link  -> embedded in an iframe
+     - Spreadsheet ID or docs.google link -> score table rendered from gviz,
+       using the same layout as the supplied Index.html / Code.gs. */
+(function () {
+  const NT2 = window.NT2 = window.NT2 || {};
+
+  // Sheet tabs allowed by the supplied Code.gs getAllSheetNames().
+  const ALLOWED_SHEETS = [
+    'ເດືອນ 09', 'ເດືອນ 10', 'ເດືອນ 11', 'ເດືອນ 12', 'ພາກຮຽນ I',
+    'ເດືອນ 02', 'ເດືອນ 03', 'ເດືອນ 04', 'ເດືອນ 05', 'ພາກຮຽນ II', 'ຄະແນນໝົດປີ'
+  ];
+
+  const t = (key, fallback) => (window.NT2 && NT2.Lang) ? NT2.Lang.t(key, fallback) : fallback;
+
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function nonEmpty(v) {
+    return v !== '' && v !== null && v !== undefined && String(v).trim() !== '';
+  }
+
+  function formatCell(v) {
+    if (!nonEmpty(v)) return '';
+    if (typeof v === 'number') {
+      return Number.isInteger(v) ? v : Math.round(v * 100) / 100;
+    }
+    const s = String(v);
+    if (s.trim() !== '' && !isNaN(s)) {
+      const n = Number(s);
+      return Number.isInteger(n) ? n : Math.round(n * 100) / 100;
+    }
+    return v;
+  }
+
+  /* ── recognise what the Sheet cell contains ── */
+  function normalize(value) {
+    const s = String(value == null ? '' : value).trim();
+    if (!s || s === '#') return { type: 'none' };
+
+    if (/script\.google\.com\/macros\/s\//i.test(s)) return { type: 'iframe', url: s };
+
+    if (/docs\.google\.com\/spreadsheets/i.test(s)) {
+      const m = s.match(/\/d\/([A-Za-z0-9_-]{10,})/);
+      if (m) return { type: 'id', id: m[1] };
+    }
+
+    if (/^https?:\/\//i.test(s)) return { type: 'iframe', url: s };
+
+    // Bare spreadsheet ID (letters, digits, - and _).
+    if (/^[A-Za-z0-9_-]{10,}$/.test(s)) return { type: 'id', id: s };
+
+    return { type: 'iframe', url: s };
+  }
+
+  /* ── gviz reader for a spreadsheet ID ── */
+  async function fetchGrid(spreadsheetId, sheetName) {
+    // Without headers=0, gviz uses the sheet's first row as column labels —
+    // that row holds the real subject headers (ຊື່, ພາສາລາວ, ຄະນິດສາດ, ...).
+    const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}`
+      + `/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&_t=${Date.now()}`;
+    const res = await fetch(url, { cache: 'no-store' });
+    const text = await res.text();
+    const m = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
+    if (!m) return null;
+    const json = JSON.parse(m[1]);
+    if (!json.table || !json.table.rows || json.status !== 'ok') return null;
+
+    const width = json.table.cols ? json.table.cols.length : 0;
+    const headers = Array.from({ length: width }, (_, i) => {
+      const label = (json.table.cols[i] && json.table.cols[i].label)
+        ? String(json.table.cols[i].label) : '';
+      // Column A often contains the whole school banner ending in "ລຳດັບ".
+      if (i === 0 && label.indexOf('ລຳດັບ') !== -1) return 'ລຳດັບ';
+      return label;
+    });
+    const rows = json.table.rows.map(row => Array.from({ length: width }, (_, i) => {
+      const cell = row.c && row.c[i];
+      if (!cell || cell.v === null || cell.v === undefined) return '';
+      // f keeps Sheet's own formatting (e.g. 2 decimal places).
+      return (typeof cell.f === 'string' && cell.f !== '') ? cell.f : cell.v;
+    }));
+    return { headers, rows };
+  }
+
+  function buildTable(grid) {
+    const rawHeaders = grid.headers || [];
+    let dataRows = (grid.rows || []).filter(row => row.some(nonEmpty));
+    dataRows = dataRows.filter(row => {
+      const col0 = String(row[0] == null ? '' : row[0]).trim();
+      const col1 = String(row[1] == null ? '' : row[1]).trim();
+      if (col0 !== '' || col1 !== '') return true;
+      return row.some(cell => {
+        if (!nonEmpty(cell)) return false;
+        const s = String(cell).trim();
+        return s !== '0' && s !== '-';
+      });
+    });
+
+    // Keep columns that have a header or real data, matching the supplied
+    // Code.gs / Index.html filtering behaviour.
+    const validCols = [];
+    for (let c = 0; c < rawHeaders.length; c++) {
+      const header = String(rawHeaders[c] == null ? '' : rawHeaders[c]).trim();
+      const hasData = dataRows.some(r => nonEmpty(r[c]));
+      if (header !== '' || hasData) validCols.push(c);
+    }
+
+    const headers = validCols.map(c => rawHeaders[c] == null ? '' : String(rawHeaders[c]));
+    const body = dataRows.map(r => validCols.map(c => formatCell(r[c])));
+    return { headers, rows: body };
+  }
+
+  /* ── modal shell ── */
+  function ensureOverlay() {
+    let overlay = document.getElementById('scoreViewerOverlay');
+    if (overlay) return overlay;
+
+    overlay = document.createElement('div');
+    overlay.id = 'scoreViewerOverlay';
+    overlay.className = 'score-viewer-overlay';
+    overlay.innerHTML = `
+      <div class="score-viewer-modal" role="dialog" aria-modal="true">
+        <div class="sv-header">
+          <div class="sv-title">
+            <span class="material-symbols-rounded">bar_chart</span>
+            <span id="svTitle"></span>
+          </div>
+          <div class="sv-actions">
+            <button class="sv-icon-btn" id="svNewTab" title="${esc(t('score.viewer.newTab', 'Open in new tab'))}" aria-label="${esc(t('score.viewer.newTab', 'Open in new tab'))}">
+              <span class="material-symbols-rounded">open_in_new</span>
+            </button>
+            <button class="sv-icon-btn" id="svTheme" title="${esc(t('score.viewer.theme', 'Theme'))}" aria-label="${esc(t('score.viewer.theme', 'Theme'))}">⚙️</button>
+            <button class="sv-icon-btn" id="svClose" title="${esc(t('score.viewer.close', 'Close'))}" aria-label="${esc(t('score.viewer.close', 'Close'))}">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+        </div>
+        <div class="sv-body" id="svBody"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', e => { if (e.target === overlay) NT2.ScoreViewer.close(); });
+    document.getElementById('svClose').addEventListener('click', () => NT2.ScoreViewer.close());
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && overlay.classList.contains('active')) NT2.ScoreViewer.close();
+    });
+    return overlay;
+  }
+
+  NT2.ScoreViewer = {
+    _state: null,
+
+    open(opts) {
+      const label = (opts && opts.label) || t('score.title_full', 'Scores');
+      const source = (opts && opts.value) || '';
+      const target = normalize(source);
+
+      if (target.type === 'none') {
+        if (NT2.App && NT2.App._noLink) NT2.App._noLink();
+        return;
+      }
+
+      const overlay = ensureOverlay();
+      const body = document.getElementById('svBody');
+      document.getElementById('svTitle').textContent = label;
+      overlay.classList.remove('sv-dark');
+      body.innerHTML = '';
+
+      const themeBtn = document.getElementById('svTheme');
+      themeBtn.textContent = '⚙️';
+      themeBtn.title = t('score.viewer.theme', 'Theme');
+
+      const newTab = document.getElementById('svNewTab');
+      newTab.title = t('score.viewer.newTab', 'Open in new tab');
+      document.getElementById('svClose').title = t('score.viewer.close', 'Close');
+      newTab.onclick = () => {
+        const url = target.type === 'id'
+          ? `https://docs.google.com/spreadsheets/d/${target.id}/edit`
+          : target.url;
+        window.open(url, '_blank', 'noopener');
+      };
+
+      overlay.classList.add('active');
+
+      if (target.type === 'iframe') {
+        const frame = document.createElement('iframe');
+        frame.className = 'sv-iframe';
+        frame.src = target.url;
+        frame.title = label;
+        frame.setAttribute('allow', 'fullscreen');
+        body.appendChild(frame);
+        this._state = { type: 'iframe' };
+        return;
+      }
+
+      // Spreadsheet ID → in-app score viewer (same features as supplied Index.html).
+      this._state = { type: 'id', id: target.id, sheets: [], current: null, term: '' };
+      body.innerHTML = `
+        <div class="sv-table-view">
+          <div class="sv-toolbar">
+            <input type="text" class="sv-search" id="svSearch"
+                   placeholder="${esc(t('score.viewer.search', 'Search names...'))}">
+            <select class="sv-select" id="svSheetSelect">
+              <option value="">${esc(t('score.viewer.selectMonth', 'Select month...'))}</option>
+            </select>
+          </div>
+          <div class="sv-banner" id="svBanner">${esc(t('score.viewer.loadingSheets', 'Loading score sheets...'))}</div>
+          <div class="sv-loader" id="svLoader"></div>
+          <div class="sv-table-container">
+            <table class="sv-table">
+              <thead><tr id="svHead"></tr></thead>
+              <tbody id="svRows"></tbody>
+            </table>
+          </div>
+        </div>`;
+
+      document.getElementById('svSearch').addEventListener('input', e => {
+        this._state.term = e.target.value.toLowerCase().trim();
+        this._renderRows();
+      });
+      document.getElementById('svSheetSelect').addEventListener('change', e => {
+        this._state.current = e.target.value;
+        this._renderRows();
+      });
+      themeBtn.onclick = () => {
+        const dark = overlay.classList.toggle('sv-dark');
+        themeBtn.textContent = dark ? '🌙' : '☀️';
+      };
+
+      this._loadSpreadsheet(target.id);
+    },
+
+    async _loadSpreadsheet(id) {
+      if (!this._state || this._state.id !== id) return;
+      const loader = document.getElementById('svLoader');
+      const banner = document.getElementById('svBanner');
+      if (loader) loader.style.display = 'block';
+
+      const results = await Promise.all(ALLOWED_SHEETS.map(async name => {
+        try {
+          const grid = await fetchGrid(id, name);
+          if (!grid) return null;
+          const table = buildTable(grid);
+          return (table.headers.length && table.rows.length) ? { name, table } : null;
+        } catch (e) { return null; }
+      }));
+
+      const sheets = results.filter(Boolean);
+      if (!this._state || this._state.id !== id) return;
+      this._state.sheets = sheets;
+      if (loader) loader.style.display = 'none';
+
+      const select = document.getElementById('svSheetSelect');
+      const bannerEl = document.getElementById('svBanner');
+      if (bannerEl) bannerEl.textContent = t('score.viewer.dataTitle', 'Score data');
+
+      if (!select) return;
+      select.innerHTML = '';
+      if (!sheets.length) {
+        select.innerHTML = `<option value="">${esc(t('score.viewer.noSheets', 'No score sheets found'))}</option>`;
+        this._setTable({ headers: [], rows: [] });
+        return;
+      }
+      sheets.forEach((s, i) => {
+        const opt = document.createElement('option');
+        opt.value = s.name;
+        opt.textContent = s.name;
+        select.appendChild(opt);
+        if (i === 0) select.value = s.name;
+      });
+      this._state.current = select.value;
+      this._renderRows();
+    },
+
+    _renderRows() {
+      const st = this._state;
+      if (!st || st.type !== 'id') return;
+      const sheet = st.sheets.find(s => s.name === st.current);
+      this._setTable(sheet ? sheet.table : { headers: [], rows: [] });
+    },
+
+    _setTable(table) {
+      const head = document.getElementById('svHead');
+      const rowsEl = document.getElementById('svRows');
+      if (!head || !rowsEl) return;
+      head.innerHTML = '';
+      rowsEl.innerHTML = '';
+
+      const headers = table.headers || [];
+      if (!headers.length || !table.rows || !table.rows.length) {
+        rowsEl.innerHTML = `<tr><td class="sv-empty">${esc(t('score.viewer.noRows', 'No data in this sheet'))}</td></tr>`;
+        return;
+      }
+      headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        head.appendChild(th);
+      });
+
+      const term = (this._state && this._state.term) || '';
+      const rows = table.rows.filter(row => !term || row.some(c => String(formatCell(c)).toLowerCase().indexOf(term) !== -1));
+      if (!rows.length) {
+        rowsEl.innerHTML = `<tr><td class="sv-empty">${esc(t('score.viewer.noMatch', 'No matching results'))}</td></tr>`;
+        return;
+      }
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        row.forEach(cell => {
+          const td = document.createElement('td');
+          td.textContent = formatCell(cell);
+          tr.appendChild(td);
+        });
+        rowsEl.appendChild(tr);
+      });
+    },
+
+    close() {
+      const overlay = document.getElementById('scoreViewerOverlay');
+      if (!overlay) return;
+      overlay.classList.remove('active');
+      const body = document.getElementById('svBody');
+      if (body) body.innerHTML = ''; // stop iframe loading
+      this._state = null;
+    }
+  };
+})();
