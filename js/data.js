@@ -766,6 +766,34 @@
       return this.getAttendanceLinksForYear(year);
     },
 
+    /* ── ລາຍຊື່ Sheet tab ຂອງໄຟລ໌ທີ່ເຊື່ອມ (ໃຊ້ໂດຍຕາຕະລາງຄະແນນ/ມາຮຽນ) ── */
+    _tabsByUrlCache: {},
+
+    async fetchSpreadsheetTabs(url) {
+      const source = String(url || '').trim();
+      if (!source) return [];
+      if (this._tabsByUrlCache[source]) return this._tabsByUrlCache[source];
+
+      try {
+        const endpoint = `${APPS_SCRIPT_URL}?action=getSpreadsheetTabs`
+          + `&url=${encodeURIComponent(source)}&_t=${Date.now()}`;
+        const res = await fetch(endpoint, { cache: 'no-store' });
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.status === 'success' && Array.isArray(json.tabs)) {
+            const tabs = json.tabs.map(v => String(v == null ? '' : v).trim()).filter(Boolean);
+            if (tabs.length) {
+              this._tabsByUrlCache[source] = tabs;
+              return tabs;
+            }
+          }
+        }
+      } catch (e) {}
+
+      // Apps Script ຍັງເປັນເວີຊັນເກົ່າ ຫຼືເປີດໄຟລ໌ບໍ່ໄດ້ → ໃຫ້ viewer ໃຊ້ຊື່ເກົ່າຕໍ່ໄປ.
+      return [];
+    },
+
     _schedulesByYearCache: {},
 
     setScheduleForYear(year, sched) {
@@ -1050,6 +1078,7 @@
       delete this._dashboardByYearCache[year];
       delete this._schedulesByYearCache[year];
       delete this._scheduleGridByYearCache[year];
+      this._tabsByUrlCache = {};
     },
 
     async addTeacher(year, teacher) {

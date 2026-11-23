@@ -919,6 +919,36 @@ function handleRequest(e) {
     }
 
     // --------------------------------------------------------
+    // ACTION: GET SHEET TABS OF A LINKED SPREADSHEET
+    // ໃຊ້ໂດຍໜ້າຕາຕະລາງຄະແນນ / ຕິດຕາມການມາຮຽນ:
+    // ເມື່ອປ່ຽນຊື່ tab ໃໝ່ ແອັບຈະຖາມລາຍຊື່ຈາກທີ່ນີ້ ແທນການເດົາຊື່ເກົ່າ.
+    // --------------------------------------------------------
+    else if (action === "getSpreadsheetTabs") {
+      var rawUrl = (e.parameter.url || e.parameter.id || "").toString().trim();
+      var tabId = "";
+      var tabMatch = rawUrl.match(/\/d\/([A-Za-z0-9_-]{10,})/);
+      if (tabMatch) {
+        tabId = tabMatch[1];
+      } else if (/^[A-Za-z0-9_-]{10,}$/.test(rawUrl)) {
+        tabId = rawUrl;
+      }
+
+      if (!tabId) {
+        result = { status: "error", message: "Invalid spreadsheet URL" };
+      } else {
+        try {
+          var linkedSs = SpreadsheetApp.openById(tabId);
+          var tabs = linkedSs.getSheets().map(function(sh) {
+            return sh.getName();
+          }).filter(function(n) { return n && n.toString().trim() !== ""; });
+          result = { status: "success", spreadsheetId: tabId, tabs: tabs };
+        } catch (tabErr) {
+          result = { status: "error", message: "Cannot open spreadsheet: " + tabErr.toString() };
+        }
+      }
+    }
+
+    // --------------------------------------------------------
     // DEFAULT
     // --------------------------------------------------------
     else {

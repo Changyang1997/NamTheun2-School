@@ -6,11 +6,39 @@
 (function () {
   const NT2 = window.NT2 = window.NT2 || {};
 
-  // Sheet tabs allowed by the supplied Code.gs getAllSheetNames().
+  // Fallback tab names, used only when Apps Script cannot supply the real list
+  // (e.g. an older Code.gs deployment still running on the host).
   const ALLOWED_SHEETS = [
     'ເດືອນ 09', 'ເດືອນ 10', 'ເດືອນ 11', 'ເດືອນ 12', 'ພາກຮຽນ I',
     'ເດືອນ 02', 'ເດືອນ 03', 'ເດືອນ 04', 'ເດືອນ 05', 'ພາກຮຽນ II', 'ຄະແນນໝົດປີ'
   ];
+
+  // ໜ້າຄະແນນ: ບໍ່ສະແດງ tab ເຫຼົ່ານີ້ໃນ dropdown (ເປັນໜ້າຕັ້ງຄ່າ/ສະຫຼຸບ ຫຼືໜ້າລາຍບຸກຄົນ).
+  const EXCLUDED_SCORE_TABS = [
+    'ຕັ້ງຄ່າ',
+    'ສະເລ່ຍພາກຮຽນ I',
+    'ເສັງພາກຮຽນ I',
+    'ສະເລ່ຍພາກຮຽນ II',
+    'ເສັງພາກຮຽນ II'
+  ];
+
+  function normalizeTabName(v) {
+    return String(v == null ? '' : v).trim()
+      .replace(/Ⅰ/g, 'I').replace(/Ⅱ/g, 'II')
+      .replace(/\s+/g, ' ');
+  }
+
+  function isExcludedScoreTab(name) {
+    const s = normalizeTabName(name);
+    if (EXCLUDED_SCORE_TABS.indexOf(s) !== -1) return true;
+    // ນຮ 01 … ນຮ 30 (ຮັບທັງແບບມີ 0 ນຳໜ້າ ແລະບໍ່ມີ)
+    const m = s.match(/^ນຮ\s*(\d{1,2})$/);
+    if (m) {
+      const n = Number(m[1]);
+      return n >= 1 && n <= 30;
+    }
+    return false;
+  }
 
   const t = (key, fallback) => (window.NT2 && NT2.Lang) ? NT2.Lang.t(key, fallback) : fallback;
 
@@ -58,11 +86,15 @@
   }
 
   /* ── gviz reader for a spreadsheet ID ── */
-  async function fetchGrid(spreadsheetId, sheetName) {
+  async function fetchGrid(spreadsheetId, sheetName, raw) {
     // Without headers=0, gviz uses the sheet's first row as column labels —
     // that row holds the real subject headers (ຊື່, ພາສາລາວ, ຄະນິດສາດ, ...).
+    // Attendance month sheets need headers=0: their first 4 rows are the
+    // ວັນທີ / ວັນ / ຊົ່ວໂມງ / ວິຊາ header block, not column labels.
     const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}`
-      + `/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&_t=${Date.now()}`;
+      + `/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`
+      + (raw ? '&headers=0' : '')
+      + `&_t=${Date.now()}`;
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
     const m = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
@@ -115,6 +147,64 @@
     return { headers, rows: body };
   }
 
+  /* ── attendance table: month tabs keep their own 4-row header block ──
+     ວັນທີ/ເດືອນ/ປີ · ວັນ · ຊົ່ວໂມງ · ວິຊາ  →  ຫົວຕາຕະລາງ
+     ແຖວນັກຮຽນເລີ່ມຫຼັງຈາກນັ້ນ (ຫຼັກທີ 1 ຢູ່ຖັນ A). */
+  function buildAttendanceTable(grid) {
+    const rows = (grid.rows || []).map(row => (row || []).slice());
+    if (!rows.length) return buildTable(grid);
+
+    const firstStudent = rows.findIndex(row =>
+      /^\d+$/.test(String(row[0] == null ? '' : row[0]).trim()) && nonEmpty(row[1]));
+    if (firstStudent < 0) return buildTable(grid); // ໜ້າສະຫຼຸບ / ຕັ້ງຄ່າ
+
+    const meta = rows.slice(0, firstStudent);
+    const findMeta = needle => meta.find(row =>
+      String(row[1] == null ? '' : row[1]).indexOf(needle) !== -1) || null;
+    const dateRow    = findMeta('ວັນທີ') || findMeta('date');
+    const dayRow     = findMeta('ວັນ(') || findMeta('day');
+    const hourRow    = findMeta('ຊົ່ວໂມງ') || findMeta('hours');
+    const subjectRow = findMeta('ວິຊາ(') || findMeta('subjects');
+    if (!dateRow && !dayRow && !hourRow && !subjectRow) return buildTable(grid);
+
+    const width = rows.reduce((w, row) => Math.max(w, row.length), (grid.headers || []).length);
+    // ວັນທີ/ວັນຖືກ merge ຂ້າມຫຼາຍຖັນຊົ່ວໂມງ → ກະຈາຍຄ່າໄປທາງຂວາ.
+    const spread = row => {
+      const out = new Array(width).fill('');
+      let last = '';
+      // ຖັນ 0/1 ແມ່ນຖັນລໍາດັບ ແລະຖັນປ້າຍ (ວັນທີ, ວັນ, ...) — ຢ່າເອົາມາເປັນຄ່າເລີ່ມຕົ້ນ.
+      for (let c = 2; c < width; c++) {
+        if (nonEmpty(row && row[c])) last = row[c];
+        out[c] = last;
+      }
+      return out;
+    };
+    const dates = spread(dateRow), days = spread(dayRow),
+          hours = spread(hourRow), subjects = spread(subjectRow);
+
+    const rawHeaders = new Array(width);
+    rawHeaders[0] = 'ລຳດັບ';
+    rawHeaders[1] = 'ຊື່ ແລະ ນາມສະກຸນ';
+    for (let c = 2; c < width; c++) {
+      const parts = [];
+      [dates[c], days[c], hours[c], subjects[c]].forEach(v => {
+        const s = nonEmpty(v) ? String(v).trim() : '';
+        if (s && parts[parts.length - 1] !== s) parts.push(s);
+      });
+      rawHeaders[c] = parts.join(' · ');
+    }
+
+    const dataRows = rows.slice(firstStudent).filter(row => row.some(nonEmpty));
+    const validCols = [];
+    for (let c = 0; c < width; c++) {
+      if (c < 2 || rawHeaders[c] !== '' || dataRows.some(r => nonEmpty(r[c]))) validCols.push(c);
+    }
+    return {
+      headers: validCols.map(c => rawHeaders[c] || ''),
+      rows: dataRows.map(r => validCols.map(c => formatCell(r[c])))
+    };
+  }
+
   /* ── modal shell ── */
   function ensureOverlay() {
     let overlay = document.getElementById('scoreViewerOverlay');
@@ -131,7 +221,7 @@
             <span id="svTitle"></span>
           </div>
           <div class="sv-actions">
-            <button class="sv-icon-btn" id="svNewTab" title="${esc(t('score.viewer.newTab', 'Open in new tab'))}" aria-label="${esc(t('score.viewer.newTab', 'Open in new tab'))}">
+            <button class="sv-icon-btn admin-only" id="svNewTab" title="${esc(t('score.viewer.newTab', 'Open in new tab'))}" aria-label="${esc(t('score.viewer.newTab', 'Open in new tab'))}">
               <span class="material-symbols-rounded">open_in_new</span>
             </button>
             <button class="sv-icon-btn" id="svTheme" title="${esc(t('score.viewer.theme', 'Theme'))}" aria-label="${esc(t('score.viewer.theme', 'Theme'))}">⚙️</button>
@@ -156,8 +246,10 @@
     _state: null,
 
     open(opts) {
-      const label = (opts && opts.label) || t('score.title_full', 'Scores');
-      const source = (opts && opts.value) || '';
+      const o = opts || {};
+      const label = o.label || t('score.title_full', 'Scores');
+      const source = o.value || '';
+      const mode = o.mode === 'attendance' ? 'attendance' : 'score';
       const target = normalize(source);
 
       if (target.type === 'none') {
@@ -198,8 +290,8 @@
         return;
       }
 
-      // Spreadsheet ID → in-app score viewer (same features as supplied Index.html).
-      this._state = { type: 'id', id: target.id, sheets: [], current: null, term: '' };
+      // Spreadsheet ID → in-app table viewer (same shell for scores & attendance).
+      this._state = { type: 'id', id: target.id, mode, sheets: [], current: null, term: '' };
       body.innerHTML = `
         <div class="sv-table-view">
           <div class="sv-toolbar">
@@ -209,7 +301,9 @@
               <option value="">${esc(t('score.viewer.selectMonth', 'Select month...'))}</option>
             </select>
           </div>
-          <div class="sv-banner" id="svBanner">${esc(t('score.viewer.loadingSheets', 'Loading score sheets...'))}</div>
+          <div class="sv-banner" id="svBanner">${esc(mode === 'attendance'
+            ? t('score.viewer.att.loadingSheets', 'Loading attendance sheets...')
+            : t('score.viewer.loadingSheets', 'Loading score sheets...'))}</div>
           <div class="sv-loader" id="svLoader"></div>
           <div class="sv-table-container">
             <table class="sv-table">
@@ -232,20 +326,40 @@
         themeBtn.textContent = dark ? '🌙' : '☀️';
       };
 
-      this._loadSpreadsheet(target.id);
+      this._loadSpreadsheet(target.id, mode);
     },
 
-    async _loadSpreadsheet(id) {
+    async _loadSpreadsheet(id, mode) {
       if (!this._state || this._state.id !== id) return;
       const loader = document.getElementById('svLoader');
       const banner = document.getElementById('svBanner');
       if (loader) loader.style.display = 'block';
 
-      const results = await Promise.all(ALLOWED_SHEETS.map(async name => {
+      const attendance = mode === 'attendance';
+
+      // ຖາມ Apps Script ເອົາລາຍຊື່ tab ຈິງຂອງໄຟລ໌ນີ້ → ຮອງຮັບການປ່ຽນຊື່ tab.
+      // ຖ້າ Code.gs ເທິງ host ຍັງເປັນເວີຊັນເກົ່າ ຈະໄດ້ [] ແລ້ວໃຊ້ຊື່ເກົ່າຕໍ່ໄປ.
+      // ໜ້າຄະແນນຕ້ອງບໍ່ສະແດງ tab ຕັ້ງຄ່າ/ສະຫຼຸບ ແລະ ນຮ 01–30;
+      // ໜ້າເຂົ້າຮ່ວມຍັງໃຊ້ລາຍຊື່ເດີມທຸກ tab.
+      let sheetNames = ALLOWED_SHEETS.filter(n => attendance || !isExcludedScoreTab(n));
+      try {
+        if (NT2.Data && typeof NT2.Data.fetchSpreadsheetTabs === 'function') {
+          const dynamic = await NT2.Data.fetchSpreadsheetTabs(
+            `https://docs.google.com/spreadsheets/d/${id}/edit`);
+          if (dynamic.length) {
+            const usable = attendance ? dynamic : dynamic.filter(n => !isExcludedScoreTab(n));
+            const known = ALLOWED_SHEETS.filter(n => usable.indexOf(n) !== -1);
+            const extra = usable.filter(n => known.indexOf(n) === -1 && ALLOWED_SHEETS.indexOf(n) === -1);
+            sheetNames = known.concat(extra).slice(0, 40);
+          }
+        }
+      } catch (e) {}
+
+      const results = await Promise.all(sheetNames.map(async name => {
         try {
-          const grid = await fetchGrid(id, name);
+          const grid = await fetchGrid(id, name, attendance);
           if (!grid) return null;
-          const table = buildTable(grid);
+          const table = attendance ? buildAttendanceTable(grid) : buildTable(grid);
           return (table.headers.length && table.rows.length) ? { name, table } : null;
         } catch (e) { return null; }
       }));
@@ -257,12 +371,17 @@
 
       const select = document.getElementById('svSheetSelect');
       const bannerEl = document.getElementById('svBanner');
-      if (bannerEl) bannerEl.textContent = t('score.viewer.dataTitle', 'Score data');
+      if (bannerEl) bannerEl.textContent = attendance
+        ? t('score.viewer.att.dataTitle', 'Attendance data')
+        : t('score.viewer.dataTitle', 'Score data');
 
       if (!select) return;
       select.innerHTML = '';
       if (!sheets.length) {
-        select.innerHTML = `<option value="">${esc(t('score.viewer.noSheets', 'No score sheets found'))}</option>`;
+        const noSheets = attendance
+          ? t('score.viewer.att.noSheets', 'No attendance sheets found')
+          : t('score.viewer.noSheets', 'No score sheets found');
+        select.innerHTML = `<option value="">${esc(noSheets)}</option>`;
         this._setTable({ headers: [], rows: [] });
         return;
       }
