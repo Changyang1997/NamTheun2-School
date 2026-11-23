@@ -147,6 +147,37 @@
     return { headers, rows: body };
   }
 
+  /* ແຖວສະຫຼຸບຈຳນວນ/ເປີເຊັນນັກຮຽນ: gviz ສົ່ງແຕ່ຕົວເລກ (9, 52.94%)
+     ໂດຍບໍ່ມີຄຳວ່າ ຄົນ / ເທົ່າກັບ ທີ່ເຫັນໃນ Google Sheet → ເຕີມໃຫ້ຕອນສະແດງ. */
+  const SCORE_SUMMARY_RE = /^ເປີເຊັນນັກຮຽນ(ເກັ່ງ|ກາງ|ອ່ອນ)ມີ$/;
+
+  function applyScoreSummaryLabels(table) {
+    (table.rows || []).forEach(row => {
+      const labelIdx = row.findIndex(v => SCORE_SUMMARY_RE.test(String(v == null ? '' : v).trim()));
+      if (labelIdx < 0) return;
+
+      let countIdx = -1, percentIdx = -1;
+      for (let c = labelIdx + 1; c < row.length; c++) {
+        const s = String(row[c] == null ? '' : row[c]).trim();
+        if (!s) continue;
+        if (percentIdx < 0 && s.indexOf('%') !== -1) percentIdx = c;
+        else if (countIdx < 0 && /^[-+]?\d+(?:\.\d+)?(?:\s*ຄົນ)?$/.test(s)) countIdx = c;
+      }
+      if (countIdx < 0) return;
+
+      // ເອົາທັງໝົດໃສ່ເຊລດຽວ (ເຊລທີ່ມີຈຳນວນຄົນ) ແລ້ວລ້າງເຊລເປີເຊັນທີ່ຊ້ຳກັນອອກ.
+      const countText = String(formatCell(row[countIdx])).trim();
+      let text = countText.indexOf('ຄົນ') !== -1 ? countText : `${countText} ຄົນ`;
+      if (percentIdx >= 0) {
+        const pctText = String(formatCell(row[percentIdx])).trim();
+        text += pctText.indexOf('ເທົ່າກັບ') !== -1 ? `, ${pctText}` : `, ເທົ່າກັບ ${pctText}`;
+        row[percentIdx] = '';
+      }
+      row[countIdx] = text;
+    });
+    return table;
+  }
+
   /* ── attendance table: month tabs keep their own 4-row header block ──
      ວັນທີ/ເດືອນ/ປີ · ວັນ · ຊົ່ວໂມງ · ວິຊາ  →  ຫົວຕາຕະລາງ
      ແຖວນັກຮຽນເລີ່ມຫຼັງຈາກນັ້ນ (ຫຼັກທີ 1 ຢູ່ຖັນ A). */
@@ -381,7 +412,7 @@
         try {
           const grid = await fetchGrid(id, name, attendance);
           if (!grid) return null;
-          const table = attendance ? buildAttendanceTable(grid) : buildTable(grid);
+          const table = attendance ? buildAttendanceTable(grid) : applyScoreSummaryLabels(buildTable(grid));
           return (table.headers.length && table.rows.length) ? { name, table } : null;
         } catch (e) { return null; }
       }));
