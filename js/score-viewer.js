@@ -195,6 +195,28 @@
     }
 
     const dataRows = rows.slice(firstStudent).filter(row => row.some(nonEmpty));
+
+    // ຖັນສະຫຼຸບ 4 ຖັນສຸດທ້າຍຂອງແຕ່ລະເດືອນ ກົງກັບກະແຈໃນໜ້າຕັ້ງຄ່າ:
+    // P = ມາຮຽນ, L = ມາຮຽນຊ້າ, E = ຂາດມີເຫດຜົນ, U = ຂາດບໍ່ມີເຫດຜົນ.
+    // ກຳນົດຊື່ໃຫ້ຖັນເຫຼົ່ານີ້ເພາະໃນ Sheet ບໍ່ມີແຖວຫົວກຳກັບ.
+    let lastDataCol = -1;
+    dataRows.forEach(row => {
+      for (let c = 0; c < width; c++) if (nonEmpty(row[c])) lastDataCol = c;
+    });
+    const summaryStart = lastDataCol - 3;
+    const summaryCodes = ['P', 'L', 'E', 'U'];
+    if (summaryStart >= 2) {
+      const hasNumericSummary = dataRows.some(row =>
+        summaryCodes.some((_, i) => {
+          const v = row[summaryStart + i];
+          return nonEmpty(v) && /^[-+]?\d+(?:\.\d+)?$/.test(String(v).trim());
+        }));
+      if (hasNumericSummary) {
+        // ບັງຄັບໃຊ້ລະຫັດສະຫຼຸບ ເພາະ spread() ດ້ານເທິງເຕີມວັນທີ່ຖືກດຶງມາໃສ່ຫົວຖັນເຫຼົ່ານີ້ແລ້ວ.
+        summaryCodes.forEach((code, i) => { rawHeaders[summaryStart + i] = code; });
+      }
+    }
+
     const validCols = [];
     for (let c = 0; c < width; c++) {
       if (c < 2 || rawHeaders[c] !== '' || dataRows.some(r => nonEmpty(r[c]))) validCols.push(c);
