@@ -81,6 +81,7 @@
   ───────────────────────────────────────── */
   NT2.App = {
     currentPage: 'dashboard',
+    showToast, // also used by pwa.js and inline image error handlers
 
     /* ── INIT ────────────────────────────── */
     async init() {
@@ -349,7 +350,7 @@
         <div class="zoom-image-container">
           <button class="zoom-close-btn" title="${L('zoom.close')}"><span class="material-symbols-rounded">close</span></button>
           <div class="zoom-image-wrapper">
-            <img src="${esc(photoUrl.trim())}" alt="${esc(title || L('zoom.image'))}" onerror="this.onerror=null;showToast('${jsq(L('zoom.load_error'))}','error');this.closest('.image-zoom-overlay').remove()">
+            <img src="${esc(photoUrl.trim())}" alt="${esc(title || L('zoom.image'))}" onerror="this.onerror=null;if(window.NT2&&NT2.App)NT2.App.showToast('${jsq(L('zoom.load_error'))}','error');var o=this.closest('.image-zoom-overlay');if(o)o.remove()">
           </div>
           ${(title || subtitle) ? `
           <div class="zoom-info">

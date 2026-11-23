@@ -54,14 +54,12 @@
 
   function formatCell(v) {
     if (!nonEmpty(v)) return '';
-    if (typeof v === 'number') {
-      return Number.isInteger(v) ? v : Math.round(v * 100) / 100;
-    }
+    // Keep fractions between 0 and 1 intact: gviz may expose a percentage as
+    // 0.5294, and rounding here to 0.53 would turn it into a wrong 53.00%.
+    const tidy = n => (Number.isInteger(n) || (n > 0 && n < 1)) ? n : Math.round(n * 100) / 100;
+    if (typeof v === 'number') return tidy(v);
     const s = String(v);
-    if (s.trim() !== '' && !isNaN(s)) {
-      const n = Number(s);
-      return Number.isInteger(n) ? n : Math.round(n * 100) / 100;
-    }
+    if (s.trim() !== '' && !isNaN(s)) return tidy(Number(s));
     return v;
   }
 
@@ -160,8 +158,13 @@
       for (let c = labelIdx + 1; c < row.length; c++) {
         const s = String(row[c] == null ? '' : row[c]).trim();
         if (!s) continue;
-        if (percentIdx < 0 && s.indexOf('%') !== -1) percentIdx = c;
-        else if (countIdx < 0 && /^[-+]?\d+(?:\.\d+)?(?:\s*ຄົນ)?$/.test(s)) countIdx = c;
+        if (percentIdx < 0 && s.indexOf('%') !== -1) { percentIdx = c; continue; }
+        // gviz may expose a percentage as a number (0.5294) instead of '52.94%'.
+        if (percentIdx < 0 && /^[-+]?\d+(?:\.\d+)?$/.test(s)) {
+          const n = Number(s);
+          if (n > 0 && n < 1) { percentIdx = c; continue; }
+        }
+        if (countIdx < 0 && /^[-+]?\d+(?:\.\d+)?(?:\s*ຄົນ)?$/.test(s)) countIdx = c;
       }
       if (countIdx < 0) return;
 
@@ -169,7 +172,11 @@
       const countText = String(formatCell(row[countIdx])).trim();
       let text = countText.indexOf('ຄົນ') !== -1 ? countText : `${countText} ຄົນ`;
       if (percentIdx >= 0) {
-        const pctText = String(formatCell(row[percentIdx])).trim();
+        let pctText = String(formatCell(row[percentIdx])).trim();
+        if (pctText.indexOf('%') === -1) {
+          const n = Number(pctText);
+          pctText = (Number.isFinite(n) && n >= 0 && n <= 1 ? (n * 100).toFixed(2) : pctText) + '%';
+        }
         text += pctText.indexOf('ເທົ່າກັບ') !== -1 ? `, ${pctText}` : `, ເທົ່າກັບ ${pctText}`;
         row[percentIdx] = '';
       }
@@ -230,22 +237,29 @@
     // ຖັນສະຫຼຸບ 4 ຖັນສຸດທ້າຍຂອງແຕ່ລະເດືອນ ກົງກັບກະແຈໃນໜ້າຕັ້ງຄ່າ:
     // P = ມາຮຽນ, L = ມາຮຽນຊ້າ, E = ຂາດມີເຫດຜົນ, U = ຂາດບໍ່ມີເຫດຜົນ.
     // ກຳນົດຊື່ໃຫ້ຖັນເຫຼົ່ານີ້ເພາະໃນ Sheet ບໍ່ມີແຖວຫົວກຳກັບ.
-    let lastDataCol = -1;
-    dataRows.forEach(row => {
-      for (let c = 0; c < width; c++) if (nonEmpty(row[c])) lastDataCol = c;
-    });
-    const summaryStart = lastDataCol - 3;
+    const isNumericCell = v => nonEmpty(v) && /^[-+]?\d+(?:\.\d+)?$/.test(String(v).trim());
+    const hasNumericCol = c => dataRows.some(row => isNumericCell(row[c]));
+    let summaryStart = -1;
+    // ຊອກກຸ່ມຖັນຕົວເລກ 4 ຖັນຕິດກັນຈາກດ້ານຂວາ (ກັນກໍລະນີມີຖັນໝາຍເຫດຕໍ່ທ້າຍ).
+    for (let c = width - 4; c >= 2; c--) {
+      if (hasNumericCol(c) && hasNumericCol(c + 1) && hasNumericCol(c + 2) && hasNumericCol(c + 3)) {
+        summaryStart = c;
+        break;
+      }
+    }
+    if (summaryStart < 0) {
+      // ສຳຮອງ: ໃຊ້ 4 ຖັນສຸດທ້າຍທີ່ມີຂໍ້ມູນ ຕາມໂຄງສ້າງເດີມ.
+      let lastDataCol = -1;
+      dataRows.forEach(row => {
+        for (let c = 0; c < width; c++) if (nonEmpty(row[c])) lastDataCol = c;
+      });
+      const candidate = lastDataCol - 3;
+      if (candidate >= 2 && hasNumericCol(candidate)) summaryStart = candidate;
+    }
     const summaryCodes = ['P', 'L', 'E', 'U'];
     if (summaryStart >= 2) {
-      const hasNumericSummary = dataRows.some(row =>
-        summaryCodes.some((_, i) => {
-          const v = row[summaryStart + i];
-          return nonEmpty(v) && /^[-+]?\d+(?:\.\d+)?$/.test(String(v).trim());
-        }));
-      if (hasNumericSummary) {
-        // ບັງຄັບໃຊ້ລະຫັດສະຫຼຸບ ເພາະ spread() ດ້ານເທິງເຕີມວັນທີ່ຖືກດຶງມາໃສ່ຫົວຖັນເຫຼົ່ານີ້ແລ້ວ.
-        summaryCodes.forEach((code, i) => { rawHeaders[summaryStart + i] = code; });
-      }
+      // ບັງຄັບໃຊ້ລະຫັດສະຫຼຸບ ເພາະ spread() ດ້ານເທິງເຕີມວັນທີ່ຖືກດຶງມາໃສ່ຫົວຖັນເຫຼົ່ານີ້ແລ້ວ.
+      summaryCodes.forEach((code, i) => { rawHeaders[summaryStart + i] = code; });
     }
 
     const validCols = [];
@@ -297,6 +311,7 @@
 
   NT2.ScoreViewer = {
     _state: null,
+    _loadToken: 0, // prevents an older tab-list request from overwriting a newer file
 
     open(opts) {
       const o = opts || {};
@@ -384,6 +399,8 @@
 
     async _loadSpreadsheet(id, mode) {
       if (!this._state || this._state.id !== id) return;
+      const token = ++this._loadToken;
+      const isCurrent = () => token === this._loadToken && this._state && this._state.id === id;
       const loader = document.getElementById('svLoader');
       const banner = document.getElementById('svBanner');
       if (loader) loader.style.display = 'block';
@@ -399,11 +416,16 @@
         if (NT2.Data && typeof NT2.Data.fetchSpreadsheetTabs === 'function') {
           const dynamic = await NT2.Data.fetchSpreadsheetTabs(
             `https://docs.google.com/spreadsheets/d/${id}/edit`);
+          if (!isCurrent()) return;
           if (dynamic.length) {
-            const usable = attendance ? dynamic : dynamic.filter(n => !isExcludedScoreTab(n));
-            const known = ALLOWED_SHEETS.filter(n => usable.indexOf(n) !== -1);
-            const extra = usable.filter(n => known.indexOf(n) === -1 && ALLOWED_SHEETS.indexOf(n) === -1);
-            sheetNames = known.concat(extra).slice(0, 40);
+            const usable = (attendance ? dynamic : dynamic.filter(n => !isExcludedScoreTab(n)))
+              .map(normalizeTabName).filter(Boolean);
+            const known = ALLOWED_SHEETS.filter(n => usable.indexOf(normalizeTabName(n)) !== -1);
+            const extra = usable.filter(n => known.indexOf(normalizeTabName(n)) === -1 &&
+              ALLOWED_SHEETS.indexOf(normalizeTabName(n)) === -1);
+            // Dynamic names are authoritative: gviz silently returns the default tab
+            // for a name that no longer exists, so do not re-add stale fallbacks.
+            sheetNames = Array.from(new Set(known.concat(extra)));
           }
         }
       } catch (e) {}
@@ -417,8 +439,8 @@
         } catch (e) { return null; }
       }));
 
+      if (!isCurrent()) return;
       const sheets = results.filter(Boolean);
-      if (!this._state || this._state.id !== id) return;
       this._state.sheets = sheets;
       if (loader) loader.style.display = 'none';
 
@@ -494,6 +516,7 @@
     close() {
       const overlay = document.getElementById('scoreViewerOverlay');
       if (!overlay) return;
+      this._loadToken++; // cancel in-flight tab/grid loads
       overlay.classList.remove('active');
       const body = document.getElementById('svBody');
       if (body) body.innerHTML = ''; // stop iframe loading

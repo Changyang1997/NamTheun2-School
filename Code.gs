@@ -900,16 +900,19 @@ function handleRequest(e) {
 
       if (!targetSheet) {
         result = { status: "error", message: "ບໍ່ພົບ Sheet Tab: " + sheetName };
-      } else if (!cells.length) {
-        result = { status: "error", message: "ບໍ່ມີຂໍ້ມູນທີ່ແກ້ໄຂ" };
+      } else if (!cells.length || cells.length > 500) {
+        result = { status: "error", message: "ບໍ່ມີຂໍ້ມູນທີ່ແກ້ໄຂ ຫຼືຈຳນວນຫຼາຍເກີນໄປ" };
       } else {
         var saved = 0;
+        var lastRow = targetSheet.getLastRow();
         cells.forEach(function(item) {
+          var kind = String(item.kind || "");
+          var baseCol = kind === "teach" ? 31 : (kind === "study" ? 24 : -1);
           var row = Number(item.row);
           var colOffset = Number(item.col);
-          var col = (item.kind === "teach" ? 31 : 24) + colOffset;
-          if (isFinite(row) && row >= 4 && colOffset >= 0 && colOffset <= 5) {
-            targetSheet.getRange(row, col).setValue(item.value == null ? "" : String(item.value));
+          if (baseCol > 0 && Number.isInteger(row) && row >= 4 && row <= lastRow &&
+              Number.isInteger(colOffset) && colOffset >= 0 && colOffset <= 5) {
+            targetSheet.getRange(row, baseCol + colOffset).setValue(item.value == null ? "" : String(item.value));
             saved++;
           }
         });

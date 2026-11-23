@@ -4,6 +4,7 @@
   const SHEET_ID   = '1ol57RaMofcBIAbWZ0ip3PP2B4FbhoZYXOkvxa6Ju3nc';
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwY5RcFeBzc5HKyEsmEBGby15KT58mSdtx_fZTva7CG8rXOCQtP01KaPJ-i9KDJIWDlPQ/exec';
   const AUTO_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
+  const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
   /* ─────────────────────────────────────────
      HELPERS
@@ -210,6 +211,7 @@
     _lastFetch:   null,
     _refreshTimer: null,
     _listeners:   [],
+    _fetchGeneration: 0, // ignore responses from an older, slower fetch
 
     /* Notify all registered listeners (pages re-render on live update) */
     _notify(source) {
@@ -225,8 +227,25 @@
       this._startAutoRefresh();
     },
 
+    /* Clear per-year data before a fresh full fetch so removed years/tabs,
+       renamed sheets and shrunken tables cannot linger from an older load. */
+    _resetFetchCaches() {
+      this._schoolInfoCache          = {};
+      this._teachersByYearCache      = {};
+      this._studentsByYearCache      = {};
+      this._scoreLinksByYearCache    = {};
+      this._attendanceLinksByYearCache = {};
+      this._dashboardByYearCache     = {};
+      this._schedulesByYearCache     = {};
+      this._scheduleGridByYearCache  = {};
+      this._tabsByUrlCache           = {};
+    },
+
     /* ── FETCH ALL SHEETS ────────────────── */
     async _fetchAll() {
+      const generation = ++this._fetchGeneration;
+      const isCurrent = () => generation === this._fetchGeneration;
+      this._resetFetchCaches();
       let anyLive = false;
 
       // 1. Fetch dynamic Sheet Tab Names from Google Apps Script
@@ -234,6 +253,7 @@
         const res = await fetch(APPS_SCRIPT_URL + '?action=getSheets');
         if (res.ok) {
           const json = await res.json();
+          if (!isCurrent()) return;
           const list = json.sheets || json.sheetNames || (Array.isArray(json) ? json : null);
           if (list && Array.isArray(list) && list.length > 0) {
             this._cache.academic_years = list.map((name, i) => ({
@@ -246,18 +266,17 @@
 
           if (json.sheetsData && Array.isArray(json.sheetsData)) {
             json.sheetsData.forEach(item => {
+              if (!isCurrent()) return;
               if (item.name) {
                 this.setSchoolInfo(item.name, {
                   logo: item.logo,
                   schoolName: item.schoolName,
                   subtitle: item.subtitle
                 });
-                if (item.teachers && Array.isArray(item.teachers) && item.teachers.length > 0) {
-                  this.setTeachersForYear(item.name, item.teachers);
-                }
-                if (item.students && Array.isArray(item.students) && item.students.length > 0) {
-                  this.setStudentsForYear(item.name, item.students);
-                }
+                // Empty arrays are meaningful now: a year with no teachers/students
+                // must show zero, not a stale list from another year.
+                if (Array.isArray(item.teachers)) this.setTeachersForYear(item.name, item.teachers);
+                if (Array.isArray(item.students)) this.setStudentsForYear(item.name, item.students);
                 if (item.scoreLinks) {
                   this.setScoreLinksForYear(item.name, item.scoreLinks);
                 }
@@ -303,10 +322,11 @@
         }
         try {
           const rows = await fetchSheet(cfg.tab);
-          if (rows && rows.length > 0) {
-            const parsed = cfg.parser(rows);
-            if (parsed && parsed.length > 0) {
-              this._cache[cfg.key] = parsed;
+          if (!isCurrent()) return;
+          if (rows) {
+            const parsed = cfg.parser(rows) || [];
+            this._cache[cfg.key] = parsed;
+            if (parsed.length > 0) {
               anyLive = true;
               console.log(`✅ Loaded sheet table: ${cfg.tab} (${parsed.length} rows)`);
             }
@@ -316,6 +336,7 @@
         }
       }
 
+      if (!isCurrent()) return;
       this._usingLive  = anyLive;
       this._lastFetch  = new Date();
       this._setSyncStatus(anyLive ? 'live' : 'empty');
@@ -477,25 +498,21 @@
     },
 
     getTeachersForYear(year) {
-      if (year && this._teachersByYearCache[year] && this._teachersByYearCache[year].length > 0) {
-        return this._teachersByYearCache[year];
-      }
+      if (year && hasOwn(this._teachersByYearCache, year)) return this._teachersByYearCache[year];
       return this.getTeachers();
     },
 
     async fetchTeachersForYear(year) {
       if (!year) return this.getTeachers();
 
-      if (this._teachersByYearCache[year] && this._teachersByYearCache[year].length > 0) {
-        return this._teachersByYearCache[year];
-      }
+      if (hasOwn(this._teachersByYearCache, year)) return this._teachersByYearCache[year];
 
       // Try Apps Script endpoint
       try {
         const res = await fetch(`${APPS_SCRIPT_URL}?action=getTeachers&sheet=${encodeURIComponent(year)}`);
         if (res.ok) {
           const json = await res.json();
-          if (json && json.status === 'success' && Array.isArray(json.teachers) && json.teachers.length > 0) {
+          if (json && json.status === 'success' && Array.isArray(json.teachers)) {
             this.setTeachersForYear(year, json.teachers);
             return json.teachers;
           }
@@ -528,10 +545,8 @@
             };
           }).filter(t => t.nameLao || t.nameEn || t.position || t.photoUrl);
 
-          if (teachers.length > 0) {
-            this.setTeachersForYear(year, teachers);
-            return teachers;
-          }
+          this.setTeachersForYear(year, teachers);
+          return teachers;
         }
       } catch(e) {}
 
@@ -546,25 +561,21 @@
     },
 
     getStudentsForYear(year) {
-      if (year && this._studentsByYearCache[year] && this._studentsByYearCache[year].length > 0) {
-        return this._studentsByYearCache[year];
-      }
+      if (year && hasOwn(this._studentsByYearCache, year)) return this._studentsByYearCache[year];
       return this.getStudents();
     },
 
     async fetchStudentsForYear(year) {
       if (!year) return this.getStudents();
 
-      if (this._studentsByYearCache[year] && this._studentsByYearCache[year].length > 0) {
-        return this._studentsByYearCache[year];
-      }
+      if (hasOwn(this._studentsByYearCache, year)) return this._studentsByYearCache[year];
 
       // Try Apps Script endpoint
       try {
         const res = await fetch(`${APPS_SCRIPT_URL}?action=getStudents&sheet=${encodeURIComponent(year)}`);
         if (res.ok) {
           const json = await res.json();
-          if (json && json.status === 'success' && Array.isArray(json.students) && json.students.length > 0) {
+          if (json && json.status === 'success' && Array.isArray(json.students)) {
             this.setStudentsForYear(year, json.students);
             return json.students;
           }
@@ -599,10 +610,8 @@
             };
           }).filter(s => s.nameLao || s.nameEn || s.photoUrl || s.className !== '—' || s.kindergarten || s.primary || s.secondary);
 
-          if (students.length > 0) {
-            this.setStudentsForYear(year, students);
-            return students;
-          }
+          this.setStudentsForYear(year, students);
+          return students;
         }
       } catch(e) {}
 
@@ -1073,8 +1082,11 @@
 
     clearYearCache(year) {
       if (!year) return;
+      delete this._schoolInfoCache[year];
       delete this._teachersByYearCache[year];
       delete this._studentsByYearCache[year];
+      delete this._scoreLinksByYearCache[year];
+      delete this._attendanceLinksByYearCache[year];
       delete this._dashboardByYearCache[year];
       delete this._schedulesByYearCache[year];
       delete this._scheduleGridByYearCache[year];
