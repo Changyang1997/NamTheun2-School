@@ -1,10 +1,10 @@
 /* Nam Theun 2 School — in-app score viewer.
    Clicking a class score button opens a modal:
      - Apps Script URL / other http link  -> embedded in an iframe
-     - Spreadsheet ID or docs.google link -> score table rendered from gviz,
-       using the same layout as the supplied Index.html / Code.gs:
-       Sheet row 6 = header, row 7+ = data, blank rows/columns removed,
-       numbers shown with at most 2 decimals, count+percent merged. */
+     - Spreadsheet ID or docs.google link -> score table rendered from CSV,
+       with only month selector, theme toggle and close button in front:
+       row 6 header and row 7+ data from CSV export (gviz drops text cells), blank rows/columns removed,
+       empty-header columns removed by Index.html, numbers rounded, count+percent merged. */
 (function () {
   const NT2 = window.NT2 = window.NT2 || {};
 
@@ -54,29 +54,69 @@
     return v !== '' && v !== null && v !== undefined && String(v).trim() !== '';
   }
 
-  // Header shown by the supplied Index.html web app.
-  const SCHOOL_LOGO = 'https://lh3.googleusercontent.com/d/1GlI1tIaUEH0MOlQDOwY038jXrdR-IwrZ';
-  const SCHOOL_NAME = 'ໂຮງຮຽນສາມັນສຶກສາ ບໍລິສັດໄຟຟ້າ ນໍ້າເທີນ 2';
-  const _sheetNames = {};
+  const _sheetMeta = {};
 
-  // Index.html calls getSpreadsheetName(); gviz has no name, so read the title
-  // of the public Sheets page once and cache it per spreadsheet.
-  async function fetchSpreadsheetName(id, fallback) {
-    if (_sheetNames[id]) return _sheetNames[id];
+  // Index.html calls getSpreadsheetName(). The public /edit page also carries
+  // every tab's gid in its topsnapshot, which the CSV export endpoint needs.
+  async function fetchSheetMeta(id, fallback) {
+    if (_sheetMeta[id]) return _sheetMeta[id];
+    const meta = { name: fallback || '', gids: {} };
     try {
       const res = await fetch(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`,
         { cache: 'no-store' });
-      const text = await res.text();
-      const m = text.match(/<title>([^<]*)<\/title>/i);
+      const raw = await res.text();
+      const m = raw.match(/<title>([^<]*)<\/title>/i);
       if (m) {
         const name = m[1].replace(/\s*-\s*Google\s+[^-]+$/i, '').trim();
-        if (name) {
-          _sheetNames[id] = name;
-          return name;
-        }
+        if (name) meta.name = name;
+      }
+      const clean = raw.replace(/\\"/g, '"');
+      const re = /\[\d+,\d+,"(\d+)",\[\{"1":\[\[0,0,"([^"]+)"\]/g;
+      let tab;
+      while ((tab = re.exec(clean))) {
+        const name = normalizeTabName(tab[2]);
+        if (name) meta.gids[name] = tab[1];
       }
     } catch (e) {}
-    return fallback || '';
+    _sheetMeta[id] = meta;
+    return meta;
+  }
+
+  /* Google Sheets CSV export returns the same display strings as
+     getDisplayValues() in Code.gs, including text like "1d", "3d",
+     "ຄົນ" and "ເທົ່າກັບ". gviz silently drops those cells, so scores
+     must use this endpoint instead. */
+  function parseCsv(text) {
+    const rows = [];
+    let row = [], field = '', quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (quoted) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else quoted = false;
+        } else field += ch;
+      } else if (ch === '"') quoted = true;
+      else if (ch === ',') { row.push(field); field = ''; }
+      else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else if (ch !== '\r') field += ch;
+    }
+    if (field !== '' || row.length) { row.push(field); rows.push(row); }
+    return rows;
+  }
+
+  async function fetchCsvGrid(spreadsheetId, sheetName, gids) {
+    const gid = gids[normalizeTabName(sheetName)];
+    if (!gid) return null;
+    const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}`
+      + `/export?format=csv&gid=${encodeURIComponent(gid)}`
+      + `&_t=${Date.now()}`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = parseCsv(await res.text());
+    if (data.length < 6) return { headers: [], rows: [] };
+    // Exactly Code.gs: row 6 = header, row 7+ = data.
+    return { headers: data[5] || [], rows: data.slice(6) };
   }
 
   function formatCell(v) {
@@ -111,17 +151,18 @@
   }
 
   /* ── raw gviz reader for a spreadsheet ID ──
-     Code.gs.txt uses Sheet row 6 as the header and row 7+ as data. gviz
-     silently drops leading empty rows, so scores explicitly request A6:ZZ
-     and take the first returned row as the header. Attendance keeps the
-     whole grid because its ວັນທີ/ວັນ/ຊົ່ວໂມງ/ວິຊາ block starts higher up. */
-  const SCORE_HEADER_ROW = 6;
+     Code.gs.txt reads Sheet row 6 as the header and row 7+ as data via
+     getDisplayValues(). gviz does not return row 6 as a data row, but
+     headers=N builds each column label from rows 1..N. Requesting 5 and 6
+     header rows and subtracting the 5-row prefix gives exactly the row-6
+     header Apps Script sees. Attendance keeps the whole grid because its
+     ວັນທີ/ວັນ/ຊົ່ວໂມງ/ວິຊາ block starts higher up. */
+  const SCORE_HEADER_ROWS = 6;
 
-  async function fetchGrid(spreadsheetId, sheetName, raw) {
-    const range = raw ? '' : `&range=${encodeURIComponent('A' + SCORE_HEADER_ROW + ':ZZ')}`;
+  async function fetchGviz(spreadsheetId, sheetName, headers) {
     const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}`
       + `/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`
-      + '&headers=0' + range
+      + `&headers=${headers}`
       + `&_t=${Date.now()}`;
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
@@ -129,9 +170,12 @@
     if (!m) return null;
     const json = JSON.parse(m[1]);
     if (!json.table || !json.table.rows || json.status !== 'ok') return null;
+    return json;
+  }
 
+  function gvizRows(json) {
     const width = json.table.cols ? json.table.cols.length : 0;
-    const rows = json.table.rows.map(row => Array.from({ length: width }, (_, i) => {
+    return json.table.rows.map(row => Array.from({ length: width }, (_, i) => {
       const cell = row.c && row.c[i];
       if (!cell) return '';
       // f keeps Sheet's own display formatting (e.g. "9 ຄົນ", "52.94%").
@@ -140,22 +184,50 @@
         ? display : cell.v;
       return (value === null || value === undefined) ? '' : value;
     }));
+  }
 
+  async function fetchGrid(spreadsheetId, sheetName, raw, gids) {
     if (!raw) {
-      // Matches getSheetData(): row 6 → headers, row 7+ → rows.
-      return { headers: rows[0] || [], rows: rows.slice(1) };
+      // Scores need the exact display values from the Sheet. CSV export is
+      // used here because gviz drops text-only cells such as "1d"/"3d".
+      const csv = await fetchCsvGrid(spreadsheetId, sheetName, gids || {});
+      if (csv) return csv;
     }
 
-    // Attendance: labels only define the width; the attendance builder creates
-    // its own headers from the 4-row ວັນທີ/ວັນ/ຊົ່ວໂມງ/ວິຊາ block.
+    if (raw) {
+      // Attendance: labels only define the width; the attendance builder creates
+      // its own headers from the 4-row ວັນທີ/ວັນ/ຊົ່ວໂມງ/ວິຊາ block.
+      const json = await fetchGviz(spreadsheetId, sheetName, 0);
+      if (!json) return null;
+      const width = json.table.cols ? json.table.cols.length : 0;
+      const headers = Array.from({ length: width }, (_, i) => {
+        const label = (json.table.cols[i] && json.table.cols[i].label)
+          ? String(json.table.cols[i].label) : '';
+        // Column A often contains the whole school banner ending in "ລຳດັບ".
+        if (i === 0 && label.indexOf('ລຳດັບ') !== -1) return 'ລຳດັບ';
+        return label;
+      });
+      return { headers, rows: gvizRows(json) };
+    }
+
+    // Scores: headers=6 makes the first data row Sheet row 7, matching
+    // data.slice(6) in getSheetData(). The extra label text is row 6.
+    const [prefixJson, dataJson] = await Promise.all([
+      fetchGviz(spreadsheetId, sheetName, SCORE_HEADER_ROWS - 1),
+      fetchGviz(spreadsheetId, sheetName, SCORE_HEADER_ROWS)
+    ]);
+    if (!dataJson) return null;
+    const width = dataJson.table.cols ? dataJson.table.cols.length : 0;
+    const prefixLabels = (prefixJson && prefixJson.table.cols)
+      ? prefixJson.table.cols.map(c => String(c.label || '').trim()) : [];
     const headers = Array.from({ length: width }, (_, i) => {
-      const label = (json.table.cols[i] && json.table.cols[i].label)
-        ? String(json.table.cols[i].label) : '';
-      // Column A often contains the whole school banner ending in "ລຳດັບ".
-      if (i === 0 && label.indexOf('ລຳດັບ') !== -1) return 'ລຳດັບ';
-      return label;
+      const col = dataJson.table.cols[i];
+      const full = String((col && col.label) || '').trim();
+      const prefix = prefixLabels[i] || '';
+      if (prefix && full.indexOf(prefix) === 0) return full.slice(prefix.length).trim();
+      return full;
     });
-    return { headers, rows };
+    return { headers, rows: gvizRows(dataJson) };
   }
 
   function buildTable(grid) {
@@ -184,6 +256,23 @@
     const headers = validCols.map(c => rawHeaders[c] == null ? '' : String(rawHeaders[c]));
     const body = dataRows.map(r => validCols.map(c => formatCell(r[c])));
     return { headers, rows: body };
+  }
+
+  /* Index.html renderTable() applies a SECOND column pass: it keeps only
+     columns whose header is non-empty, even if Code.gs kept them because they
+     had data. It skips this pass when every header is empty. */
+  function applyIndexColumnFilter(table) {
+    const headers = table.headers || [];
+    if (!headers.length) return table;
+    const validIndices = [];
+    for (let i = 0; i < headers.length; i++) {
+      if (String(headers[i] == null ? '' : headers[i]).trim() !== '') validIndices.push(i);
+    }
+    if (!validIndices.length || validIndices.length === headers.length) return table;
+    return {
+      headers: validIndices.map(i => headers[i]),
+      rows: (table.rows || []).map(row => validIndices.map(i => row[i]))
+    };
   }
 
   /* ແຖວສະຫຼຸບຈຳນວນ/ເປີເຊັນນັກຮຽນ: gviz ສົ່ງແຕ່ຕົວເລກ (9, 52.94%)
@@ -329,6 +418,9 @@
             <span id="svTitle"></span>
           </div>
           <div class="sv-actions">
+            <select class="sv-header-select" id="svSheetSelect" aria-label="${esc(t('score.viewer.selectMonth', 'Select month...'))}">
+              <option value="" disabled selected>${esc(t('score.viewer.selectMonth', 'Select month...'))}</option>
+            </select>
             <button class="sv-icon-btn admin-only" id="svNewTab" title="${esc(t('score.viewer.newTab', 'Open in new tab'))}" aria-label="${esc(t('score.viewer.newTab', 'Open in new tab'))}">
               <span class="material-symbols-rounded">open_in_new</span>
             </button>
@@ -376,7 +468,14 @@
       themeBtn.textContent = '⚙️';
       themeBtn.title = t('score.viewer.theme', 'Theme');
 
+      // The month selector lives in the modal header from now on. Hidden for
+      // iframe links and cleared so a previous file's options never flash.
+      const sheetSelect = document.getElementById('svSheetSelect');
+      sheetSelect.style.display = 'none';
+      sheetSelect.innerHTML = `<option value="" disabled selected>${esc(t('score.viewer.selectMonth', 'Select month...'))}</option>`;
+
       const newTab = document.getElementById('svNewTab');
+      newTab.style.display = '';
       newTab.title = t('score.viewer.newTab', 'Open in new tab');
       document.getElementById('svClose').title = t('score.viewer.close', 'Close');
       newTab.onclick = () => {
@@ -404,8 +503,17 @@
         return;
       }
 
-      // Spreadsheet ID → table view matching the supplied Index.html layout.
-      themeBtn.style.display = 'none'; // theme toggle lives in the sheet header
+      // Spreadsheet ID → table view. Month select + theme sit next to close;
+      // no control bar remains above the table.
+      sheetSelect.style.display = '';
+      themeBtn.style.display = '';
+      themeBtn.onclick = () => {
+        const modes = ['auto', 'light', 'dark'];
+        const i = modes.indexOf(this._state.themeMode);
+        this._state.themeMode = modes[(i + 1) % modes.length];
+        this._applyTheme();
+      };
+      newTab.style.display = 'none';   // no "open in new tab" in table view
       const media = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
       this._state = {
         type: 'id', id: target.id, mode, sheets: [], current: null, term: '', label,
@@ -425,25 +533,6 @@
 
       body.innerHTML = `
         <div class="sv-table-view">
-          <div class="sv-header-card">
-            <div class="sv-school-info">
-              <img src="${SCHOOL_LOGO}" alt="School Logo" class="sv-school-logo"
-                   onerror="this.style.display='none'">
-              <div class="sv-school-text">
-                <div class="sv-school-name">${esc(SCHOOL_NAME)}</div>
-                <div class="sv-sheet-subtitle" id="svBanner">${esc(t('score.viewer.loading', 'ກໍາລັງໂຫລດ...'))}</div>
-              </div>
-            </div>
-            <div class="sv-right-controls">
-              <input type="text" class="sv-search" id="svSearch"
-                     placeholder="🔍 ${esc(t('score.viewer.search', 'Search names...'))}">
-              <select class="sv-select" id="svSheetSelect">
-                <option value="" disabled selected>${esc(t('score.viewer.selectMonth', 'Select month...'))}</option>
-              </select>
-              <button type="button" class="sv-theme-toggle" id="svThemeToggle"
-                      title="${esc(t('score.viewer.theme.auto', 'Mode: Auto'))}">⚙️</button>
-            </div>
-          </div>
           <div class="sv-loader" id="svLoader"></div>
           <div class="sv-table-container">
             <table class="sv-table">
@@ -453,20 +542,10 @@
           </div>
         </div>`;
 
-      document.getElementById('svSearch').addEventListener('input', e => {
-        this._state.term = e.target.value.toLowerCase().trim();
-        this._renderRows();
-      });
-      document.getElementById('svSheetSelect').addEventListener('change', e => {
+      sheetSelect.onchange = e => {
         this._state.current = e.target.value;
         this._renderRows();
-      });
-      document.getElementById('svThemeToggle').addEventListener('click', () => {
-        const modes = ['auto', 'light', 'dark'];
-        const i = modes.indexOf(this._state.themeMode);
-        this._state.themeMode = modes[(i + 1) % modes.length];
-        this._applyTheme();
-      });
+      };
       this._applyTheme();
 
       this._loadSpreadsheet(target.id, mode);
@@ -476,7 +555,7 @@
       const st = this._state;
       if (!st || st.type !== 'id') return;
       const overlay = document.getElementById('scoreViewerOverlay');
-      const btn = document.getElementById('svThemeToggle');
+      const btn = document.getElementById('svTheme');
       if (!overlay || !btn) return;
       const mode = st.themeMode || 'auto';
       const dark = mode === 'dark' || (mode === 'auto' && st.systemDark);
@@ -500,12 +579,9 @@
       const loader = document.getElementById('svLoader');
       if (loader) loader.style.display = 'block';
 
-      // Index.html puts the spreadsheet name in the header banner.
-      fetchSpreadsheetName(id, this._state.label || '').then(name => {
-        if (!isCurrent()) return;
-        const bannerEl = document.getElementById('svBanner');
-        if (bannerEl && name) bannerEl.textContent = name;
-      });
+      // One /edit fetch gives the tab gids used by the score CSV export.
+      // The spreadsheet name is no longer shown in the table header.
+      const metaPromise = fetchSheetMeta(id, '');
 
       const attendance = mode === 'attendance';
 
@@ -532,11 +608,16 @@
         }
       } catch (e) {}
 
+      let gids = {};
+      try { gids = ((await metaPromise).gids) || {}; } catch (e) {}
+
       const results = await Promise.all(sheetNames.map(async name => {
         try {
-          const grid = await fetchGrid(id, name, attendance);
+          const grid = await fetchGrid(id, name, attendance, gids);
           if (!grid) return null;
-          const table = attendance ? buildAttendanceTable(grid) : applyScoreSummaryLabels(buildTable(grid));
+          const table = attendance
+            ? buildAttendanceTable(grid)
+            : applyIndexColumnFilter(applyScoreSummaryLabels(buildTable(grid)));
           return (table.headers.length && table.rows.length) ? { name, table } : null;
         } catch (e) { return null; }
       }));
