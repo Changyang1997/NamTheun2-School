@@ -2,7 +2,9 @@
    Clicking a class score button opens a modal:
      - Apps Script URL / other http link  -> embedded in an iframe
      - Spreadsheet ID or docs.google link -> score table rendered from gviz,
-       using the same layout as the supplied Index.html / Code.gs. */
+       using the same layout as the supplied Index.html / Code.gs:
+       Sheet row 6 = header, row 7+ = data, blank rows/columns removed,
+       numbers shown with at most 2 decimals, count+percent merged. */
 (function () {
   const NT2 = window.NT2 = window.NT2 || {};
 
@@ -52,6 +54,31 @@
     return v !== '' && v !== null && v !== undefined && String(v).trim() !== '';
   }
 
+  // Header shown by the supplied Index.html web app.
+  const SCHOOL_LOGO = 'https://lh3.googleusercontent.com/d/1GlI1tIaUEH0MOlQDOwY038jXrdR-IwrZ';
+  const SCHOOL_NAME = 'ໂຮງຮຽນສາມັນສຶກສາ ບໍລິສັດໄຟຟ້າ ນໍ້າເທີນ 2';
+  const _sheetNames = {};
+
+  // Index.html calls getSpreadsheetName(); gviz has no name, so read the title
+  // of the public Sheets page once and cache it per spreadsheet.
+  async function fetchSpreadsheetName(id, fallback) {
+    if (_sheetNames[id]) return _sheetNames[id];
+    try {
+      const res = await fetch(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/edit`,
+        { cache: 'no-store' });
+      const text = await res.text();
+      const m = text.match(/<title>([^<]*)<\/title>/i);
+      if (m) {
+        const name = m[1].replace(/\s*-\s*Google\s+[^-]+$/i, '').trim();
+        if (name) {
+          _sheetNames[id] = name;
+          return name;
+        }
+      }
+    } catch (e) {}
+    return fallback || '';
+  }
+
   function formatCell(v) {
     if (!nonEmpty(v)) return '';
     // Keep fractions between 0 and 1 intact: gviz may expose a percentage as
@@ -83,15 +110,18 @@
     return { type: 'iframe', url: s };
   }
 
-  /* ── gviz reader for a spreadsheet ID ── */
+  /* ── raw gviz reader for a spreadsheet ID ──
+     Code.gs.txt uses Sheet row 6 as the header and row 7+ as data. gviz
+     silently drops leading empty rows, so scores explicitly request A6:ZZ
+     and take the first returned row as the header. Attendance keeps the
+     whole grid because its ວັນທີ/ວັນ/ຊົ່ວໂມງ/ວິຊາ block starts higher up. */
+  const SCORE_HEADER_ROW = 6;
+
   async function fetchGrid(spreadsheetId, sheetName, raw) {
-    // Without headers=0, gviz uses the sheet's first row as column labels —
-    // that row holds the real subject headers (ຊື່, ພາສາລາວ, ຄະນິດສາດ, ...).
-    // Attendance month sheets need headers=0: their first 4 rows are the
-    // ວັນທີ / ວັນ / ຊົ່ວໂມງ / ວິຊາ header block, not column labels.
+    const range = raw ? '' : `&range=${encodeURIComponent('A' + SCORE_HEADER_ROW + ':ZZ')}`;
     const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}`
       + `/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`
-      + (raw ? '&headers=0' : '')
+      + '&headers=0' + range
       + `&_t=${Date.now()}`;
     const res = await fetch(url, { cache: 'no-store' });
     const text = await res.text();
@@ -101,6 +131,23 @@
     if (!json.table || !json.table.rows || json.status !== 'ok') return null;
 
     const width = json.table.cols ? json.table.cols.length : 0;
+    const rows = json.table.rows.map(row => Array.from({ length: width }, (_, i) => {
+      const cell = row.c && row.c[i];
+      if (!cell) return '';
+      // f keeps Sheet's own display formatting (e.g. "9 ຄົນ", "52.94%").
+      const display = cell.f;
+      const value = (display !== undefined && display !== null && String(display) !== '')
+        ? display : cell.v;
+      return (value === null || value === undefined) ? '' : value;
+    }));
+
+    if (!raw) {
+      // Matches getSheetData(): row 6 → headers, row 7+ → rows.
+      return { headers: rows[0] || [], rows: rows.slice(1) };
+    }
+
+    // Attendance: labels only define the width; the attendance builder creates
+    // its own headers from the 4-row ວັນທີ/ວັນ/ຊົ່ວໂມງ/ວິຊາ block.
     const headers = Array.from({ length: width }, (_, i) => {
       const label = (json.table.cols[i] && json.table.cols[i].label)
         ? String(json.table.cols[i].label) : '';
@@ -108,12 +155,6 @@
       if (i === 0 && label.indexOf('ລຳດັບ') !== -1) return 'ລຳດັບ';
       return label;
     });
-    const rows = json.table.rows.map(row => Array.from({ length: width }, (_, i) => {
-      const cell = row.c && row.c[i];
-      if (!cell || cell.v === null || cell.v === undefined) return '';
-      // f keeps Sheet's own formatting (e.g. 2 decimal places).
-      return (typeof cell.f === 'string' && cell.f !== '') ? cell.f : cell.v;
-    }));
     return { headers, rows };
   }
 
@@ -348,6 +389,11 @@
       overlay.classList.add('active');
 
       if (target.type === 'iframe') {
+        themeBtn.style.display = '';
+        themeBtn.onclick = () => {
+          const dark = overlay.classList.toggle('sv-dark');
+          themeBtn.textContent = dark ? '🌙' : '☀️';
+        };
         const frame = document.createElement('iframe');
         frame.className = 'sv-iframe';
         frame.src = target.url;
@@ -358,20 +404,46 @@
         return;
       }
 
-      // Spreadsheet ID → in-app table viewer (same shell for scores & attendance).
-      this._state = { type: 'id', id: target.id, mode, sheets: [], current: null, term: '' };
+      // Spreadsheet ID → table view matching the supplied Index.html layout.
+      themeBtn.style.display = 'none'; // theme toggle lives in the sheet header
+      const media = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+      this._state = {
+        type: 'id', id: target.id, mode, sheets: [], current: null, term: '', label,
+        themeMode: 'auto', systemDark: media ? media.matches : false
+      };
+      const onSystemTheme = () => {
+        if (!media || !this._state || this._state.type !== 'id' || this._state.themeMode !== 'auto') return;
+        this._state.systemDark = media.matches;
+        this._applyTheme();
+      };
+      this._themeMedia = media;
+      this._themeListener = onSystemTheme;
+      if (media) {
+        if (media.addEventListener) media.addEventListener('change', onSystemTheme);
+        else if (media.addListener) media.addListener(onSystemTheme);
+      }
+
       body.innerHTML = `
         <div class="sv-table-view">
-          <div class="sv-toolbar">
-            <input type="text" class="sv-search" id="svSearch"
-                   placeholder="${esc(t('score.viewer.search', 'Search names...'))}">
-            <select class="sv-select" id="svSheetSelect">
-              <option value="">${esc(t('score.viewer.selectMonth', 'Select month...'))}</option>
-            </select>
+          <div class="sv-header-card">
+            <div class="sv-school-info">
+              <img src="${SCHOOL_LOGO}" alt="School Logo" class="sv-school-logo"
+                   onerror="this.style.display='none'">
+              <div class="sv-school-text">
+                <div class="sv-school-name">${esc(SCHOOL_NAME)}</div>
+                <div class="sv-sheet-subtitle" id="svBanner">${esc(t('score.viewer.loading', 'ກໍາລັງໂຫລດ...'))}</div>
+              </div>
+            </div>
+            <div class="sv-right-controls">
+              <input type="text" class="sv-search" id="svSearch"
+                     placeholder="🔍 ${esc(t('score.viewer.search', 'Search names...'))}">
+              <select class="sv-select" id="svSheetSelect">
+                <option value="" disabled selected>${esc(t('score.viewer.selectMonth', 'Select month...'))}</option>
+              </select>
+              <button type="button" class="sv-theme-toggle" id="svThemeToggle"
+                      title="${esc(t('score.viewer.theme.auto', 'Mode: Auto'))}">⚙️</button>
+            </div>
           </div>
-          <div class="sv-banner" id="svBanner">${esc(mode === 'attendance'
-            ? t('score.viewer.att.loadingSheets', 'Loading attendance sheets...')
-            : t('score.viewer.loadingSheets', 'Loading score sheets...'))}</div>
           <div class="sv-loader" id="svLoader"></div>
           <div class="sv-table-container">
             <table class="sv-table">
@@ -389,12 +461,36 @@
         this._state.current = e.target.value;
         this._renderRows();
       });
-      themeBtn.onclick = () => {
-        const dark = overlay.classList.toggle('sv-dark');
-        themeBtn.textContent = dark ? '🌙' : '☀️';
-      };
+      document.getElementById('svThemeToggle').addEventListener('click', () => {
+        const modes = ['auto', 'light', 'dark'];
+        const i = modes.indexOf(this._state.themeMode);
+        this._state.themeMode = modes[(i + 1) % modes.length];
+        this._applyTheme();
+      });
+      this._applyTheme();
 
       this._loadSpreadsheet(target.id, mode);
+    },
+
+    _applyTheme() {
+      const st = this._state;
+      if (!st || st.type !== 'id') return;
+      const overlay = document.getElementById('scoreViewerOverlay');
+      const btn = document.getElementById('svThemeToggle');
+      if (!overlay || !btn) return;
+      const mode = st.themeMode || 'auto';
+      const dark = mode === 'dark' || (mode === 'auto' && st.systemDark);
+      overlay.classList.toggle('sv-dark', dark);
+      if (mode === 'auto') {
+        btn.textContent = '⚙️';
+        btn.title = t('score.viewer.theme.auto', 'Mode: Auto');
+      } else if (mode === 'light') {
+        btn.textContent = '☀️';
+        btn.title = t('score.viewer.theme.light', 'Mode: Light');
+      } else {
+        btn.textContent = '🌙';
+        btn.title = t('score.viewer.theme.dark', 'Mode: Dark');
+      }
     },
 
     async _loadSpreadsheet(id, mode) {
@@ -402,8 +498,14 @@
       const token = ++this._loadToken;
       const isCurrent = () => token === this._loadToken && this._state && this._state.id === id;
       const loader = document.getElementById('svLoader');
-      const banner = document.getElementById('svBanner');
       if (loader) loader.style.display = 'block';
+
+      // Index.html puts the spreadsheet name in the header banner.
+      fetchSpreadsheetName(id, this._state.label || '').then(name => {
+        if (!isCurrent()) return;
+        const bannerEl = document.getElementById('svBanner');
+        if (bannerEl && name) bannerEl.textContent = name;
+      });
 
       const attendance = mode === 'attendance';
 
@@ -445,19 +547,14 @@
       if (loader) loader.style.display = 'none';
 
       const select = document.getElementById('svSheetSelect');
-      const bannerEl = document.getElementById('svBanner');
-      if (bannerEl) bannerEl.textContent = attendance
-        ? t('score.viewer.att.dataTitle', 'Attendance data')
-        : t('score.viewer.dataTitle', 'Score data');
-
       if (!select) return;
       select.innerHTML = '';
       if (!sheets.length) {
-        const noSheets = attendance
-          ? t('score.viewer.att.noSheets', 'No attendance sheets found')
-          : t('score.viewer.noSheets', 'No score sheets found');
-        select.innerHTML = `<option value="">${esc(noSheets)}</option>`;
-        this._setTable({ headers: [], rows: [] });
+        const noTablesOption = t('score.viewer.noTablesOption', 'No data tables');
+        const noTables = t('score.viewer.noTables', 'No sheets with data were found');
+        select.innerHTML = `<option value="" disabled selected>${esc(noTablesOption)}</option>`;
+        const rowsEl = document.getElementById('svRows');
+        if (rowsEl) rowsEl.innerHTML = `<tr><td class="sv-empty">${esc(noTables)}</td></tr>`;
         return;
       }
       sheets.forEach((s, i) => {
@@ -517,6 +614,12 @@
       const overlay = document.getElementById('scoreViewerOverlay');
       if (!overlay) return;
       this._loadToken++; // cancel in-flight tab/grid loads
+      if (this._themeMedia && this._themeListener) {
+        if (this._themeMedia.removeEventListener) this._themeMedia.removeEventListener('change', this._themeListener);
+        else if (this._themeMedia.removeListener) this._themeMedia.removeListener(this._themeListener);
+      }
+      this._themeMedia = null;
+      this._themeListener = null;
       overlay.classList.remove('active');
       const body = document.getElementById('svBody');
       if (body) body.innerHTML = ''; // stop iframe loading

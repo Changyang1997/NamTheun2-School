@@ -1,5 +1,5 @@
 /* Nam Theun 2 School — service worker (app shell cache) */
-const CACHE_NAME = 'nt2-school-v17';
+const CACHE_NAME = 'nt2-school-v19';
 
 const APP_SHELL = [
   './',
