@@ -598,9 +598,10 @@
     },
 
     init() {
-      let saved = 'lo';
-      try { saved = localStorage.getItem('nt2_lang') || 'lo'; } catch (e) {}
-      this.current = (saved === 'en') ? 'en' : 'lo';
+      // Every fresh page load starts in Lao, even if EN was selected earlier.
+      // The toggle still works for the current visit; the next visit resets.
+      this.current = 'lo';
+      try { localStorage.setItem('nt2_lang', 'lo'); } catch (e) {}
       this.applyStatic();
     }
   };

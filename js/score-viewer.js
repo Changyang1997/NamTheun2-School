@@ -4,7 +4,7 @@
      - Spreadsheet ID or docs.google link -> score table rendered from CSV,
        with only month selector, theme toggle and close button in front:
        row 6 header and row 7+ data from CSV export (gviz drops text cells), blank rows/columns removed,
-       empty-header columns removed by Index.html, numbers rounded, count+percent merged. */
+       empty-header columns removed by Index.html, numbers rounded, count cell shows only the number. */
 (function () {
   const NT2 = window.NT2 = window.NT2 || {};
 
@@ -85,7 +85,8 @@
   /* Google Sheets CSV export returns the same display strings as
      getDisplayValues() in Code.gs, including text like "1d", "3d",
      "ຄົນ" and "ເທົ່າກັບ". gviz silently drops those cells, so scores
-     must use this endpoint instead. */
+     must use this endpoint instead. Only the count cell is trimmed to the
+     number; ຄົນ / ເທົ່າກັບ / percent stay in their own Sheet columns. */
   function parseCsv(text) {
     const rows = [];
     let row = [], field = '', quoted = false;
@@ -275,8 +276,10 @@
     };
   }
 
-  /* ແຖວສະຫຼຸບຈຳນວນ/ເປີເຊັນນັກຮຽນ: gviz ສົ່ງແຕ່ຕົວເລກ (9, 52.94%)
-     ໂດຍບໍ່ມີຄຳວ່າ ຄົນ / ເທົ່າກັບ ທີ່ເຫັນໃນ Google Sheet → ເຕີມໃຫ້ຕອນສະແດງ. */
+  /* CSV gives each Sheet cell in its own column:
+     label | 9 | ຄົນ | ເທົ່າກັບ | 52.94%.
+     Keep them all where the Sheet has them; only trim the count cell so it
+     shows the number without a trailing ຄົນ. */
   const SCORE_SUMMARY_RE = /^ເປີເຊັນນັກຮຽນ(ເກັ່ງ|ກາງ|ອ່ອນ)ມີ$/;
 
   function applyScoreSummaryLabels(table) {
@@ -284,33 +287,16 @@
       const labelIdx = row.findIndex(v => SCORE_SUMMARY_RE.test(String(v == null ? '' : v).trim()));
       if (labelIdx < 0) return;
 
-      let countIdx = -1, percentIdx = -1;
+      let countIdx = -1;
       for (let c = labelIdx + 1; c < row.length; c++) {
         const s = String(row[c] == null ? '' : row[c]).trim();
-        if (!s) continue;
-        if (percentIdx < 0 && s.indexOf('%') !== -1) { percentIdx = c; continue; }
-        // gviz may expose a percentage as a number (0.5294) instead of '52.94%'.
-        if (percentIdx < 0 && /^[-+]?\d+(?:\.\d+)?$/.test(s)) {
-          const n = Number(s);
-          if (n > 0 && n < 1) { percentIdx = c; continue; }
-        }
-        if (countIdx < 0 && /^[-+]?\d+(?:\.\d+)?(?:\s*ຄົນ)?$/.test(s)) countIdx = c;
+        if (/^[-+]?\d+(?:\.\d+)?(?:\s*ຄົນ)?$/.test(s)) { countIdx = c; break; }
       }
       if (countIdx < 0) return;
 
-      // ເອົາທັງໝົດໃສ່ເຊລດຽວ (ເຊລທີ່ມີຈຳນວນຄົນ) ແລ້ວລ້າງເຊລເປີເຊັນທີ່ຊ້ຳກັນອອກ.
-      const countText = String(formatCell(row[countIdx])).trim();
-      let text = countText.indexOf('ຄົນ') !== -1 ? countText : `${countText} ຄົນ`;
-      if (percentIdx >= 0) {
-        let pctText = String(formatCell(row[percentIdx])).trim();
-        if (pctText.indexOf('%') === -1) {
-          const n = Number(pctText);
-          pctText = (Number.isFinite(n) && n >= 0 && n <= 1 ? (n * 100).toFixed(2) : pctText) + '%';
-        }
-        text += pctText.indexOf('ເທົ່າກັບ') !== -1 ? `, ${pctText}` : `, ເທົ່າກັບ ${pctText}`;
-        row[percentIdx] = '';
-      }
-      row[countIdx] = text;
+      const raw = String(row[countIdx] == null ? '' : row[countIdx]).trim();
+      const num = raw.match(/^([-+]?\d+(?:\.\d+)?)/);
+      row[countIdx] = num ? num[1] : raw.replace(/ຄົນ/g, '').trim();
     });
     return table;
   }
